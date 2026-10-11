@@ -42,6 +42,10 @@ var configVoto = { mode: "", max: 1 };
 var pushNotificationsInitialized = false;
 var localNotificationsPlugin = null;
 var appUpdateChecked = false;
+var APP_UPDATE_CHECK_INTERVAL_MS = 7 * 24 * 60 * 60 * 1000;
+var APP_UPDATE_LAST_CHECK_KEY = 'gens_app_update_last_check';
+var APP_UPDATE_RELEASE_URL = 'https://gensssshhh-collab.github.io/Sito-web-Gens-Ssshhh/release.json';
+var APP_UPDATE_DRIVE_FOLDER_URL = 'https://drive.google.com/drive/folders/1fnvFt3mddJ0LR-xn8_2QUGNvl_yNz';
 var bilancioRequestInFlight = null;
 var bilancioCacheTimestamp = 0;
 var newsRequestInFlight = null;
@@ -60,18 +64,35 @@ function controllaAggiornamentoApp() {
     if (appUpdateChecked || !window.Capacitor || !window.Capacitor.getPlatform || window.Capacitor.getPlatform() !== 'android') return;
     appUpdateChecked = true;
 
-    var releaseUrl = 'https://gensssshhh-collab.github.io/Sito-web-Gens-Ssshhh/release.json?ts=' + Date.now();
+    var now = Date.now();
+    var lastCheck = Number(localStorage.getItem(APP_UPDATE_LAST_CHECK_KEY) || 0);
+    if (lastCheck && now - lastCheck < APP_UPDATE_CHECK_INTERVAL_MS) return;
+
+    var releaseUrl = APP_UPDATE_RELEASE_URL + '?ts=' + now;
+    function leggiRelease(url) {
+        return fetch(url, { cache: 'no-store' }).then(function (response) {
+            if (!response.ok) {
+                throw new Error('Risposta HTTP ' + response.status + ' per ' + url);
+            }
+            return response.json();
+        });
+    }
+
     Promise.all([
-        fetch('release.json?local=' + Date.now()).then(function (response) { return response.json(); }),
-        fetch(releaseUrl, { cache: 'no-store' }).then(function (response) { return response.json(); })
+        leggiRelease('release.json?local=' + now),
+        leggiRelease(releaseUrl)
     ]).then(function (releases) {
-        var installedRelease = Number(releases[0].releaseId || 0);
-        var availableRelease = Number(releases[1].releaseId || 0);
+        var installedRelease = Number(releases[0] && releases[0].releaseId);
+        var availableRelease = Number(releases[1] && releases[1].releaseId);
+        if (!Number.isFinite(installedRelease) || !Number.isFinite(availableRelease)) {
+            throw new Error('Metadati di versione non validi in release.json.');
+        }
+        localStorage.setItem(APP_UPDATE_LAST_CHECK_KEY, String(now));
         if (!availableRelease || availableRelease <= installedRelease) return;
 
         // Usa il link dell'APK se presente; altrimenti apre la cartella condivisa delle versioni.
-        var driveFolderUrl = 'https://drive.google.com/drive/folders/1fnvFt3mdJ0LR-xn8_2QUGNvl_yNz';
-        var downloadUrl = String(releases[1].downloadUrl || releases[1].apkUrl || releases[1].driveFolderUrl || driveFolderUrl).trim();
+        var metadata = releases[1];
+        var downloadUrl = String(metadata.downloadUrl || metadata.apkUrl || metadata.driveFolderUrl || APP_UPDATE_DRIVE_FOLDER_URL).trim();
         if (!/^https:\/\//i.test(downloadUrl)) {
             console.error('Link di download Google Drive mancante in release.json (downloadUrl).');
             return;
@@ -83,7 +104,7 @@ function controllaAggiornamentoApp() {
             downloadUrl = 'https://drive.google.com/uc?export=download&id=' + encodeURIComponent(driveFileId[1]);
         }
 
-        if (confirm('È disponibile una nuova versione dell’app. Vuoi aggiornarla ora?')) {
+        if (window.confirm('È disponibile una nuova versione dell’app. Vuoi aggiornarla ora?')) {
             window.location.href = downloadUrl;
         }
     }).catch(function (error) {
@@ -6238,5 +6259,3 @@ function salvaMovimentoComposto() {
         if (btn) { btn.disabled = false; btn.innerText = "Salva Movimento Quadrato"; }
     });
 }
-
-

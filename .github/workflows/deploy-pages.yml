@@ -37,7 +37,8 @@ jobs:
             "app": "Gens Ssshhh",
             "version": "1.0.0",
             "releaseDate": "${RELEASE_DATE}",
-            "releaseId": "${RELEASE_ID}"
+            "releaseId": "${RELEASE_ID}",
+            "driveFolderUrl": "https://drive.google.com/drive/folders/1fnvFt3mddJ0LR-xn8_2QUGNvl_yNz"
           }
           EOF
 

@@ -69,10 +69,22 @@ function controllaAggiornamentoApp() {
         var availableRelease = Number(releases[1].releaseId || 0);
         if (!availableRelease || availableRelease <= installedRelease) return;
 
+        // Usa il link dell'APK se presente; altrimenti apre la cartella condivisa delle versioni.
+        var driveFolderUrl = 'https://drive.google.com/drive/folders/1fnvFt3mdJ0LR-xn8_2QUGNvl_yNz';
+        var downloadUrl = String(releases[1].downloadUrl || releases[1].apkUrl || releases[1].driveFolderUrl || driveFolderUrl).trim();
+        if (!/^https:\/\//i.test(downloadUrl)) {
+            console.error('Link di download Google Drive mancante in release.json (downloadUrl).');
+            return;
+        }
+
+        // Trasforma i link di condivisione di un file Drive in link diretti al download.
+        var driveFileId = downloadUrl.match(/drive\.google\.com\/file\/d\/([^/?]+)/) || downloadUrl.match(/[?&]id=([^&]+)/);
+        if (driveFileId && downloadUrl.indexOf('drive.google.com') >= 0) {
+            downloadUrl = 'https://drive.google.com/uc?export=download&id=' + encodeURIComponent(driveFileId[1]);
+        }
+
         if (confirm('È disponibile una nuova versione dell’app. Vuoi aggiornarla ora?')) {
-            var playUrl = 'https://play.google.com/store/apps/details?id=it.associazione.gens_ssshhh';
-            window.location.href = 'market://details?id=it.associazione.gens_ssshhh';
-            setTimeout(function () { window.location.href = playUrl; }, 1200);
+            window.location.href = downloadUrl;
         }
     }).catch(function (error) {
         console.error('Impossibile controllare gli aggiornamenti:', error);

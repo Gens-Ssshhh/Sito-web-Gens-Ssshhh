@@ -1147,7 +1147,11 @@ function renderNotifiche(notifiche) {
         return;
     }
     lista.innerHTML = notifiche.map(function (notifica) {
-        return `<article class="notification-item notification-${notifica.tipo || 'info'}"><strong>${notifica.titolo}</strong><p>${notifica.testo}</p></article>`;
+        var tipo = /^(error|warning|info|action)$/.test(notifica.tipo || '') ? notifica.tipo : 'info';
+        var azione = notifica.viewId === 'viewCalendario'
+            ? '<button type="button" class="notification-open-action" onclick="chiudiNotifiche(event);nav(\'viewCalendario\')">Apri calendario</button>'
+            : '';
+        return `<article class="notification-item notification-${tipo}"><strong>${escapeActionCenterText(notifica.titolo || '')}</strong><p>${escapeActionCenterText(notifica.testo || '')}</p>${azione}</article>`;
     }).join('');
 }
 
@@ -4963,6 +4967,23 @@ function renderProposteEventi(proposte) {
         for (var conteggioIndice = 1; conteggioIndice < opzioni.length; conteggioIndice++) {
             if (Number(preferenze[conteggioIndice] || 0) > Number(preferenze[opzioneVincente] || 0)) opzioneVincente = conteggioIndice;
         }
+        var risultatiOrdinati = opzioni.map(function (opzione, indice) {
+            return { opzione: opzione, indice: indice, voti: Number(preferenze[indice] || 0) };
+        }).sort(function (a, b) {
+            return b.voti - a.voti || a.indice - b.indice;
+        });
+        var preferenzeMassime = risultatiOrdinati.length ? risultatiOrdinati[0].voti : 0;
+        var riepilogoOpzioniHtml = opzioni.length
+            ? '<details class="event-results-details"><summary>Risultati per data e ora</summary><p>' + Number(interesse.si || 0) + ' risposte Sì · preferenze facoltative</p><ol>' +
+            risultatiOrdinati.map(function (risultato) {
+                var classePrincipale = preferenzeMassime > 0 && risultato.voti === preferenzeMassime ? ' event-result-leading' : '';
+                return '<li class="event-result-option' + classePrincipale + '"><span><strong>' +
+                    escapeTestoEvento(risultato.opzione.data || 'Data da definire') + ' · ' + escapeTestoEvento(risultato.opzione.ora || 'Ora da definire') +
+                    '</strong><small>' + escapeTestoEvento(risultato.opzione.luogo || 'Luogo non specificato') + '</small></span><b>' +
+                    risultato.voti + (risultato.voti === 1 ? ' preferenza' : ' preferenze') +
+                    (classePrincipale ? '<em>Più votata</em>' : '') + '</b></li>';
+            }).join('') + '</ol></details>'
+            : '';
         var opzioniHtml = opzioni.map(function (opzione, indice) {
             return '<label class="event-vote-option"><input type="checkbox" data-role="preferenza" value="' + indice + '">' +
                 '<span><strong>' + escapeTestoEvento(opzione.data || 'Data da definire') + ' · ' + escapeTestoEvento(opzione.ora || 'Ora da definire') +
@@ -4977,11 +4998,11 @@ function renderProposteEventi(proposte) {
         var votoEsistente = proposta.mioVoto
             ? '<p class="event-vote-confirmation" role="status">Hai già risposto a questa proposta.</p>'
             : '<div class="event-vote-form" data-event-id="' + id + '">' +
-            '<fieldset class="event-interest-fieldset"><legend>Ti interessa partecipare?</legend>' +
-            '<label><input type="radio" name="interesse-' + id + '" data-role="interesse" value="si"> Sì</label>' +
-            '<label><input type="radio" name="interesse-' + id + '" data-role="interesse" value="no"> No</label></fieldset>' +
-            '<div class="event-preferences" hidden><strong>Quali date e orari preferisci?</strong>' + opzioniHtml + editorOpzione + '</div>' +
-            '<button type="button" class="btn-primary event-submit-vote">Invia risposta</button></div>';
+            '<div class="event-vote-actions" aria-label="Rispondi alla proposta">' +
+            '<button type="button" class="event-vote-choice event-vote-yes" data-choice="si">👍 Sì, partecipo</button>' +
+            '<button type="button" class="event-vote-choice event-vote-no" data-choice="no">No</button></div>' +
+            '<details class="event-preference-details"><summary>Preferenze di data e ora (facoltative)</summary>' +
+            '<div class="event-preferences"><strong>Quali date e orari preferisci?</strong>' + opzioniHtml + editorOpzione + '</div></details></div>';
         var opzioneFinale = opzioni[opzioneVincente] || {};
         var confermaHtml = proposta.creatore && Number(interesse.si || 0) > 0
             ? '<section class="event-confirm-panel"><h5>Conferma evento</h5><p>Opzione più scelta, modificabile. Sarà creato un evento di 2 ore con invito a chi ha risposto Sì.</p>' +
@@ -4991,11 +5012,13 @@ function renderProposteEventi(proposte) {
             '<input type="text" data-role="final-luogo" value="' + escapeTestoEvento(opzioneFinale.luogo || '') + '" placeholder="Luogo (facoltativo)"></div>' +
             '<button type="submit" class="btn-primary">Conferma e invita chi ha detto Sì</button></form></section>'
             : '';
-        var toolsHtml = '<button type="button" class="compact-action event-share-link">Condividi con esterni</button>';
+        var toolsHtml = '<details class="event-card-menu"><summary aria-label="Altre azioni" title="Altre azioni">⋮</summary>' +
+            '<div class="event-card-menu-items"><button type="button" class="event-share-link">Condividi con esterni</button>';
         var editorCreatore = '';
         if (proposta.creatore) {
-            toolsHtml += '<button type="button" class="compact-action event-cancel-proposal">Elimina proposta</button>';
-            editorCreatore = '<details class="event-edit-details"><summary>Modifica proposta</summary>' +
+            toolsHtml += '<button type="button" class="event-cancel-proposal">Elimina proposta</button>';
+            editorCreatore = '<details class="event-management-details"><summary>⚙️ Gestisci proposta</summary><div class="event-management-content">' + confermaHtml +
+                '<details class="event-edit-details"><summary>Modifica proposta</summary>' +
                 '<form class="event-edit-form" data-event-id="' + id + '">' +
                 '<label class="public-event-field">Titolo<input data-role="edit-titolo" maxlength="120" value="' + escapeTestoEvento(proposta.titolo || '') + '" required></label>' +
                 '<label class="public-event-field">Descrizione<textarea data-role="edit-descrizione" rows="3" maxlength="1000">' + escapeTestoEvento(proposta.descrizione || '') + '</textarea></label>' +
@@ -5003,24 +5026,23 @@ function renderProposteEventi(proposte) {
                     return htmlRigaModificaOpzione_(opzione, indice);
                 }).join('') + '</div>' +
                 '<button type="button" class="compact-action event-edit-add-option">+ Aggiungi opzione</button>' +
-                '<button type="submit" class="btn-primary">Salva modifiche</button></form></details>';
+                '<button type="submit" class="btn-primary">Salva modifiche</button></form></details></div></details>';
         }
+        toolsHtml += '</div></details>';
 
         return '<article class="event-proposal-card" data-proposal-id="' + id + '">' +
             '<header class="event-proposal-heading"><div><h4>' + escapeTestoEvento(proposta.titolo || 'Evento proposto') + '</h4>' +
             '<p>' + escapeTestoEvento(proposta.descrizione || '') + '</p></div><div class="event-card-actions">' + toolsHtml + '</div></header>' + editorCreatore +
-            '<div class="event-proposal-counts"><span><strong>' + Number(interesse.si || 0) + '</strong> interessati</span>' +
-            '<span><strong>' + Number(interesse.no || 0) + '</strong> non interessati</span></div>' + votoEsistente + confermaHtml + '</article>';
+            '<div class="event-proposal-counts"><span class="event-count-yes"><span aria-hidden="true">👍</span><strong>' + Number(interesse.si || 0) + '</strong> interessati</span>' +
+            '<span class="event-count-no"><span aria-hidden="true">👎</span><strong>' + Number(interesse.no || 0) + '</strong> non interessati</span></div>' +
+            riepilogoOpzioniHtml + votoEsistente + '</article>';
     }).join('');
 
     list.querySelectorAll('.event-vote-form').forEach(function (form) {
-        form.querySelectorAll('[data-role="interesse"]').forEach(function (radio) {
-            radio.addEventListener('change', function () {
-                form.querySelector('.event-preferences').hidden = radio.value !== 'si';
+        form.querySelectorAll('.event-vote-choice').forEach(function (button) {
+            button.addEventListener('click', function () {
+                votaPropostaEvento(form.getAttribute('data-event-id'), form, button.getAttribute('data-choice'), button);
             });
-        });
-        form.querySelector('.event-submit-vote').addEventListener('click', function () {
-            votaPropostaEvento(form.getAttribute('data-event-id'), form);
         });
     });
     list.querySelectorAll('.event-share-link').forEach(function (button) {
@@ -5055,8 +5077,8 @@ function renderProposteEventi(proposte) {
             aggiornaRimozioneModificaProposta_(form);
         });
     });
-    list.querySelectorAll('.event-edit-details').forEach(function (details) {
-        aggiornaRimozioneModificaProposta_(details.querySelector('.event-edit-form'));
+    list.querySelectorAll('.event-edit-form').forEach(function (form) {
+        aggiornaRimozioneModificaProposta_(form);
     });
     list.querySelectorAll('.event-cancel-proposal').forEach(function (button) {
         button.addEventListener('click', function () {
@@ -5228,21 +5250,27 @@ function messaggioErroreVotoEvento(messaggio) {
     return messaggio || 'Risposta non registrata.';
 }
 
-async function votaPropostaEvento(propostaId, form) {
-    var interesse = form.querySelector('[data-role="interesse"]:checked');
-    var opzioni = interesse && interesse.value === 'si'
+async function votaPropostaEvento(propostaId, form, interesse, pulsante) {
+    var opzioni = interesse === 'si'
         ? Array.prototype.map.call(form.querySelectorAll('[data-role="preferenza"]:checked'), function (input) { return Number(input.value); })
         : [];
-    if (!interesse) return showToast('Indica se ti interessa partecipare.', 'error');
-    if (interesse.value === 'si' && !opzioni.length) return showToast('Scegli almeno una data e un orario.', 'error');
+    var pulsantiVoto = form.querySelectorAll('.event-vote-choice');
+    pulsantiVoto.forEach(function (button) { button.disabled = true; });
+    if (pulsante) pulsante.textContent = 'Registrazione...';
 
-    var result = await chiamaServer('votaPropostaEvento', [curEmail, propostaId, { interesse: interesse.value, opzioni: opzioni }], true).catch(function (error) {
+    var result = await chiamaServer('votaPropostaEvento', [curEmail, propostaId, { interesse: interesse, opzioni: opzioni }], true).catch(function (error) {
         showToast(error.message || 'Impossibile registrare la risposta.', 'error');
         return null;
     });
-    if (!result) return;
+    if (!result) {
+        pulsantiVoto.forEach(function (button) { button.disabled = false; });
+        if (pulsante) pulsante.textContent = interesse === 'si' ? '👍 Sì, partecipo' : 'No';
+        return;
+    }
     if (!result.ok) {
         showToast(messaggioErroreVotoEvento(result.messaggio), 'error');
+        pulsantiVoto.forEach(function (button) { button.disabled = false; });
+        if (pulsante) pulsante.textContent = interesse === 'si' ? '👍 Sì, partecipo' : 'No';
         return;
     }
 
@@ -5303,50 +5331,54 @@ async function apriVotoPubblicoEvento(propostaId) {
     var interesse = proposta.voti && proposta.voti.interesse || { si: 0, no: 0 };
     contenuto.innerHTML = '<span class="section-kicker">Proposta evento</span><h1>' + escapeTestoEvento(proposta.titolo) + '</h1>' +
         '<p class="public-event-description">' + escapeTestoEvento(proposta.descrizione) + '</p>' +
-        '<p class="public-event-totals">' + Number(interesse.si || 0) + ' interessati · ' + Number(interesse.no || 0) + ' non interessati</p>' +
+        '<p class="public-event-totals"><span class="event-count-yes">👍 ' + Number(interesse.si || 0) + ' interessati</span><span class="event-count-no">👎 ' + Number(interesse.no || 0) + ' non interessati</span></p>' +
         '<form id="publicEventVoteForm" data-event-id="' + escapeTestoEvento(proposta.id) + '">' +
         '<label class="public-event-field">Nome<input name="nome" autocomplete="name" required maxlength="100"></label>' +
         '<label class="public-event-field">E-mail<input name="email" type="email" autocomplete="email" required maxlength="254"></label>' +
-        '<fieldset class="event-interest-fieldset"><legend>Ti interessa partecipare?</legend>' +
-        '<label><input type="radio" name="interesse" value="si" required> Sì</label>' +
-        '<label><input type="radio" name="interesse" value="no"> No</label></fieldset>' +
-        '<div class="event-preferences" hidden><strong>Quali date e orari preferisci?</strong>' + preferenze + editorOpzione + '</div>' +
-        '<button class="btn-primary" type="submit">Invia risposta</button><p class="public-event-privacy">L’e-mail serve solo a impedire voti duplicati e non viene mostrata agli altri partecipanti.</p></form>';
+        '<div class="event-vote-actions" aria-label="Rispondi alla proposta">' +
+        '<button type="button" class="event-vote-choice event-vote-yes" data-choice="si">👍 Sì, partecipo</button>' +
+        '<button type="button" class="event-vote-choice event-vote-no" data-choice="no">No</button></div>' +
+        '<details class="event-preference-details"><summary>Preferenze di data e ora (facoltative)</summary>' +
+        '<div class="event-preferences"><strong>Quali date e orari preferisci?</strong>' + preferenze + editorOpzione + '</div></details>' +
+        '<p class="public-event-privacy">L’e-mail serve solo a impedire voti duplicati e non viene mostrata agli altri partecipanti.</p></form>';
 
     var form = document.getElementById('publicEventVoteForm');
-    form.querySelectorAll('[name="interesse"]').forEach(function (radio) {
-        radio.addEventListener('change', function () {
-            form.querySelector('.event-preferences').hidden = radio.value !== 'si';
+    form.querySelectorAll('.event-vote-choice').forEach(function (button) {
+        button.addEventListener('click', function () {
+            inviaVotoPubblicoEvento(form, button.getAttribute('data-choice'), button);
         });
-    });
-    form.addEventListener('submit', function (event) {
-        event.preventDefault();
-        inviaVotoPubblicoEvento(form);
     });
     collegaEditorOpzioniAggiuntive_(form);
 }
 
-async function inviaVotoPubblicoEvento(form) {
-    var interesse = form.querySelector('[name="interesse"]:checked');
-    var opzioni = interesse && interesse.value === 'si'
+async function inviaVotoPubblicoEvento(form, interesse, pulsante) {
+    if (!form.reportValidity()) return;
+    var opzioni = interesse === 'si'
         ? Array.prototype.map.call(form.querySelectorAll('[data-role="preferenza"]:checked'), function (input) { return Number(input.value); })
         : [];
-    if (!interesse) return showToast('Indica se ti interessa partecipare.', 'error');
-    if (interesse.value === 'si' && !opzioni.length) return showToast('Scegli almeno una data e un orario.', 'error');
+    var pulsantiVoto = form.querySelectorAll('.event-vote-choice');
+    pulsantiVoto.forEach(function (button) { button.disabled = true; });
+    if (pulsante) pulsante.textContent = 'Registrazione...';
 
     var dati = {
         nome: form.elements.nome.value.trim(),
         email: form.elements.email.value.trim(),
-        interesse: interesse.value,
+        interesse: interesse,
         opzioni: opzioni
     };
     var result = await chiamaServer('votaPropostaEvento', ['', form.getAttribute('data-event-id'), dati], true).catch(function (error) {
         showToast(error.message || 'Impossibile registrare la risposta.', 'error');
         return null;
     });
-    if (!result) return;
+    if (!result) {
+        pulsantiVoto.forEach(function (button) { button.disabled = false; });
+        if (pulsante) pulsante.textContent = interesse === 'si' ? '👍 Sì, partecipo' : 'No';
+        return;
+    }
     if (!result.ok) {
         showToast(messaggioErroreVotoEvento(result.messaggio), 'error');
+        pulsantiVoto.forEach(function (button) { button.disabled = false; });
+        if (pulsante) pulsante.textContent = interesse === 'si' ? '👍 Sì, partecipo' : 'No';
         return;
     }
     form.innerHTML = '<p class="event-vote-confirmation" role="status">Grazie, la tua risposta è stata registrata.</p>';

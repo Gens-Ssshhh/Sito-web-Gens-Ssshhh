@@ -66,9 +66,11 @@ function inviaNotificaPush(titolo, testo, emailDestinatario, viewId) {
     "Content-Type": "application/json"
   };
 
-  var destinatari = emailDestinatario
-    ? [String(emailDestinatario).trim().toLowerCase()]
-    : Object.keys(tokens);
+  var destinatari = Array.isArray(emailDestinatario)
+    ? emailDestinatario.map(function (email) { return String(email).trim().toLowerCase(); })
+    : emailDestinatario
+      ? [String(emailDestinatario).trim().toLowerCase()]
+      : Object.keys(tokens);
 
   destinatari.forEach(function (email) {
     (tokens[email] || []).forEach(function (item) {

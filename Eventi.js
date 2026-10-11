@@ -9,7 +9,7 @@ function getFoglioProposteEventi_() {
     sheet.appendRow(['ID', 'CreatoIl', 'CreatoreEmail', 'Titolo', 'Descrizione', 'OpzioniJson', 'VotiJson', 'Stato']);
   }
   var headers = sheet.getDataRange().getValues()[0] || [];
-  [['EventoCalendarId', 8], ['OpzioneConfermataJson', 9]].forEach(function (item) {
+  [['EventoCalendarId', 8], ['OpzioneConfermataJson', 9], ['PromemoriaNonVotantiInviatoIl', 10]].forEach(function (item) {
     if (String(headers[item[1]] || '') !== item[0]) sheet.getRange(1, item[1] + 1).setValue(item[0]);
   });
   return sheet;
@@ -111,6 +111,7 @@ function preparaPropostaEvento_(row, email) {
     titolo: String(row[3] || ''),
     descrizione: String(row[4] || ''),
     opzioni: opzioni,
+    creataIl: row[1] instanceof Date ? row[1].toISOString() : String(row[1] || ''),
     voti: voti.riepilogo,
     mioVoto: voti.mioVoto,
     creatore: String(row[2] || '').trim().toLowerCase() === String(email || '').trim().toLowerCase()
@@ -151,9 +152,10 @@ function creaPropostaEvento(email, password, proposta) {
   }
 
   var id = Utilities.getUuid();
+  var creataIl = new Date();
   getFoglioProposteEventi_().appendRow([
     id,
-    new Date(),
+    creataIl,
     String(email).trim().toLowerCase(),
     titolo,
     descrizione,
@@ -161,6 +163,17 @@ function creaPropostaEvento(email, password, proposta) {
     JSON.stringify({}),
     'ATTIVA'
   ]);
+
+  try { configuraTriggerPromemoriaProposteEvento_(); } catch (e) { console.log('Trigger promemoria eventi non configurato: ' + e); }
+  try {
+    inviaComunicazioniPropostaEvento_(
+      sociAttiviProposteEvento_(),
+      titolo,
+      id,
+      false
+    );
+  } catch (e) { console.log('Notifica nuova proposta evento non completata: ' + e); }
+
   return { ok: true, proposta: { id: id, titolo: titolo, descrizione: descrizione, opzioni: opzioni, voti: {} } };
 }
 
@@ -301,10 +314,10 @@ function votaPropostaEvento(email, propostaId, risposta) {
     var row = values[rowIndex];
     var opzioni = JSON.parse(row[5] || '[]');
     var scelte = interessato === 'si' ? opzioniScelte.map(Number) : [];
-    if ((interessato === 'si' && !scelte.length) || scelte.some(function (indice) {
+    if (scelte.some(function (indice) {
       return !Number.isInteger(indice) || indice < 0 || indice >= opzioni.length;
     })) {
-      return { ok: false, messaggio: interessato === 'si' ? 'Seleziona almeno una preferenza di data e ora.' : 'Opzione non valida.' };
+      return { ok: false, messaggio: 'Opzione non valida.' };
     }
     scelte = scelte.filter(function (indice, index) { return scelte.indexOf(indice) === index; });
 
@@ -435,4 +448,100 @@ function confermaEventoProposto(dati) {
   } finally {
     lock.releaseLock();
   }
+}
+
+function sociAttiviProposteEvento_() {
+  var sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('soci');
+  if (!sheet) return [];
+  var rows = sheet.getDataRange().getValues();
+  if (!rows.length) return [];
+  var headers = rows[0].map(function (value) { return String(value).trim().toLowerCase(); });
+  var emailIndex = headers.indexOf('email');
+  if (emailIndex < 0) emailIndex = 2;
+  var statusIndex = headers.indexOf('stato socio');
+  return rows.slice(1).filter(function (row) {
+    var email = String(row[emailIndex] || '').trim();
+    var attivo = statusIndex < 0 || String(row[statusIndex] || '').trim().toLowerCase() === 'attivo';
+    return attivo && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+  }).map(function (row) { return String(row[emailIndex]).trim().toLowerCase(); }).filter(function (email, index, emails) {
+    return emails.indexOf(email) === index;
+  });
+}
+
+function escapeHtmlEvento_(valore) {
+  return String(valore == null ? '' : valore).replace(/[&<>"']/g, function (carattere) {
+    return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[carattere];
+  });
+}
+
+function inviaComunicazioniPropostaEvento_(emails, titolo, propostaId, promemoria) {
+  if (!emails.length) return;
+  var oggetto = promemoria ? 'Promemoria: questionario evento' : 'Nuovo questionario evento';
+  var testoEvento = escapeHtmlEvento_(titolo);
+  var url = 'https://gensssshhh-collab.github.io/Sito-web-Gens-Ssshhh/index.html?evento=' + encodeURIComponent(propostaId);
+  var intro = promemoria
+    ? 'Sono passati tre giorni e non risulta ancora una tua risposta.'
+    : 'È stato pubblicato un nuovo questionario per un evento.';
+  var body = intro + '\n\n' + titolo + '\n\nApri il questionario: ' + url;
+  var htmlBody = '<div style="font-family:Arial,sans-serif;color:#243247;line-height:1.5">' +
+    '<p>' + intro + '</p><h2>' + testoEvento + '</h2><p><a href="' + url + '">Apri il questionario evento</a></p>' +
+    '<p>Gens Ssshhh</p></div>';
+
+  try {
+    for (var inizio = 0; inizio < emails.length; inizio += 40) {
+      var gruppo = emails.slice(inizio, inizio + 40);
+      MailApp.sendEmail({
+        to: 'undisclosed-recipients@gmail.com',
+        bcc: gruppo.join(','),
+        subject: oggetto + ': ' + titolo,
+        body: body,
+        htmlBody: htmlBody,
+        name: 'Gens Ssshhh'
+      });
+    }
+  } catch (e) {
+    console.log('Invio email questionario evento non completato: ' + e);
+  }
+
+  try {
+    if (typeof inviaNotificaPush === 'function') {
+      inviaNotificaPush(oggetto, 'Partecipa al questionario: ' + titolo, emails, 'viewCalendario');
+    }
+  } catch (e) {
+    console.log('Invio push questionario evento non completato: ' + e);
+  }
+}
+
+function configuraTriggerPromemoriaProposteEvento_() {
+  var presente = ScriptApp.getProjectTriggers().some(function (trigger) {
+    return trigger.getHandlerFunction() === 'inviaPromemoriaProposteEvento';
+  });
+  if (!presente) ScriptApp.newTrigger('inviaPromemoriaProposteEvento').timeBased().everyDays(1).atHour(9).create();
+}
+
+function inviaPromemoriaProposteEvento() {
+  var sheet = getFoglioProposteEventi_();
+  var rows = sheet.getDataRange().getValues();
+  var sociAttivi = sociAttiviProposteEvento_();
+  var adesso = new Date();
+  var promemoriaInviati = 0;
+
+  for (var i = 1; i < rows.length; i++) {
+    var row = rows[i];
+    if (String(row[7] || 'ATTIVA') !== 'ATTIVA' || row[10]) continue;
+    var creataIl = row[1] instanceof Date ? row[1] : new Date(row[1]);
+    if (isNaN(creataIl.getTime()) || adesso.getTime() - creataIl.getTime() < 3 * 86400000) continue;
+
+    var opzioni = [];
+    var votanti = {};
+    try { opzioni = JSON.parse(row[5] || '[]'); } catch (e) { }
+    votanti = leggiVotiEvento_(row[6], opzioni, '').votanti;
+    var senzaRisposta = sociAttivi.filter(function (email) {
+      return votanti['socio:' + email] === undefined && votanti[email] === undefined;
+    });
+    inviaComunicazioniPropostaEvento_(senzaRisposta, String(row[3] || 'Evento proposto'), String(row[0]), true);
+    sheet.getRange(i + 1, 11).setValue(adesso);
+    promemoriaInviati++;
+  }
+  return promemoriaInviati;
 }

@@ -564,6 +564,32 @@ function getNotificheUtente(email) {
     }
   } catch (e) { }
 
+  try {
+    if (typeof getProposteEventi === "function") {
+      var adesso = new Date();
+      (getProposteEventi(email) || []).forEach(function (proposta) {
+        if (proposta.mioVoto) return;
+        var titoloEvento = String(proposta.titolo || "Evento proposto");
+        var creataIl = proposta.creataIl ? new Date(proposta.creataIl) : null;
+        var passate72Ore = creataIl && !isNaN(creataIl.getTime()) && adesso.getTime() - creataIl.getTime() >= 3 * 86400000;
+        notifiche.push({
+          tipo: "action",
+          titolo: "Nuovo questionario evento",
+          testo: "È aperto il questionario per " + titoloEvento + ". Esprimi la tua risposta.",
+          viewId: "viewCalendario"
+        });
+        if (passate72Ore) {
+          notifiche.push({
+            tipo: "warning",
+            titolo: "Promemoria questionario evento",
+            testo: "Non risulta ancora una tua risposta per " + titoloEvento + ". Il questionario è ancora aperto.",
+            viewId: "viewCalendario"
+          });
+        }
+      });
+    }
+  } catch (e) { }
+
   return notifiche;
 }
 

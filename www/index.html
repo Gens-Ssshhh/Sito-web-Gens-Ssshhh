@@ -535,71 +535,67 @@
                         <div class="club-status-badge"><span class="sidebar-status-dot"></span> Agenda associativa</div>
                     </div>
 
-                    <div class="calendar-panel">
+                    <div class="calendar-panel calendar-proposals-panel">
                         <div class="calendar-header-row">
-                            <h3>Proposte aperte al voto</h3>
+                            <div>
+                                <span class="section-kicker">Partecipa e scegli</span>
+                                <h3>Proposte aperte al voto</h3>
+                            </div>
                             <button class="compact-action" onclick="renderCalendarioView()">Aggiorna</button>
                         </div>
                         <div id="eventiPropostiList" class="calendar-list"></div>
                     </div>
 
-                    <div class="calendar-panel" style="margin-top: 20px;">
-                        <div class="calendar-header-row">
-                            <h3>Proponi un evento</h3>
-                        </div>
-
-                        <div style="display: grid; gap: 15px;">
-                            <div>
-                                <label
-                                    style="display: block; font-size: 13px; font-weight: bold; color: #334155; margin-bottom: 5px;">Titolo
-                                    evento</label>
-                                <input type="text" id="eventoNome"
-                                    placeholder="Es. Calcetto serale, Cena sociale, Escape room..."
-                                    style="width: 100%; padding: 10px; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 14px;">
-                            </div>
-                            <div>
-                                <label
-                                    style="display: block; font-size: 13px; font-weight: bold; color: #334155; margin-bottom: 5px;">Descrizione
-                                    (facoltativa)</label>
-                                <textarea id="eventoDescrizione" rows="3" maxlength="1000"
-                                    placeholder="Aggiungi dettagli utili per chi voterà la proposta."
-                                    style="width: 100%; padding: 10px; border: 1px solid #cbd5e1; border-radius: 6px; resize: vertical; font-size: 14px;"></textarea>
-                            </div>
-                            <div>
-                                <div
-                                    style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px;">
-                                    <label
-                                        style="display: block; font-size: 13px; font-weight: bold; color: #334155;">Possibili
-                                        date / orari / luoghi</label>
-                                    <button type="button" onclick="aggiungiOpzioneEvento()"
-                                        style="background: #f8fafc; border: 1px solid #cbd5e1; border-radius: 6px; padding: 6px 10px; font-size: 12px; font-weight: bold; color: #0f172a; cursor: pointer;">+
-                                        aggiungi</button>
-                                </div>
-
-                                <div id="eventOptionsList" class="event-options-editor">
-                                    <div class="event-option-row">
-                                        <div class="event-option-fields">
-                                            <input type="text" data-role="data" inputmode="numeric" maxlength="10"
-                                                placeholder="dd/mm/aaaa">
-                                            <input type="text" data-role="ora" inputmode="numeric" maxlength="5"
-                                                placeholder="hh:mm">
-                                        </div>
-                                        <div class="event-option-actions">
-                                            <button type="button" data-action="luogo"
-                                                onclick="toggleLuogoOpzione(this)">Aggiungi luogo</button>
-                                            <button type="button" data-action="rimuovi"
-                                                onclick="rimuoviOpzioneEvento(this)" disabled>Rimuovi</button>
+                    <details class="calendar-compose-panel">
+                        <summary class="calendar-compose-summary">
+                            <span class="calendar-compose-icon" aria-hidden="true">+</span>
+                            <span class="calendar-compose-copy">
+                                <strong>Proponi un evento</strong>
+                                <small>Hai un’idea per il prossimo appuntamento?</small>
+                            </span>
+                            <span class="calendar-compose-chevron" aria-hidden="true">⌄</span>
+                        </summary>
+                        <div class="calendar-compose-content">
+                            <div class="calendar-compose-fields">
+                                <label class="calendar-form-field">
+                                    <span>Titolo evento</span>
+                                    <input type="text" id="eventoNome"
+                                        placeholder="Es. Calcetto serale, Cena sociale, Escape room...">
+                                </label>
+                                <label class="calendar-form-field">
+                                    <span>Descrizione <small>(facoltativa)</small></span>
+                                    <textarea id="eventoDescrizione" rows="3" maxlength="1000"
+                                        placeholder="Aggiungi dettagli utili per chi voterà la proposta."></textarea>
+                                </label>
+                                <div class="calendar-form-field">
+                                    <div class="calendar-options-heading">
+                                        <span>Possibili date, orari e luoghi</span>
+                                        <button type="button" class="calendar-add-option"
+                                            onclick="aggiungiOpzioneEvento()">+ Aggiungi data</button>
+                                    </div>
+                                    <div id="eventOptionsList" class="event-options-editor">
+                                        <div class="event-option-row">
+                                            <div class="event-option-fields">
+                                                <input type="text" data-role="data" inputmode="numeric" maxlength="10"
+                                                    placeholder="dd/mm/aaaa">
+                                                <input type="text" data-role="ora" inputmode="numeric" maxlength="5"
+                                                    placeholder="hh:mm">
+                                            </div>
+                                            <div class="event-option-actions">
+                                                <button type="button" data-action="luogo"
+                                                    onclick="toggleLuogoOpzione(this)">Aggiungi luogo</button>
+                                                <button type="button" data-action="rimuovi"
+                                                    onclick="rimuoviOpzioneEvento(this)" disabled>Rimuovi</button>
+                                            </div>
                                         </div>
                                     </div>
                                 </div>
+                                <button class="calendar-submit-proposal" onclick="inviaPropostaEvento()">
+                                    Invia proposta <span aria-hidden="true">→</span>
+                                </button>
                             </div>
-
-                            <button onclick="inviaPropostaEvento()"
-                                style="background: #f59e0b; color: white; padding: 12px; border: none; border-radius: 6px; font-weight: bold; width: 100%; cursor: pointer;">
-                                INVIA PROPOSTA EVENTO
-                            </button>
                         </div>
-                    </div>
+                    </details>
 
                 </div>
 
@@ -1793,7 +1789,6 @@
                         </div>
 
                         <button class="btn-primary" onclick="adminInviaFirma()">INVIA RICHIESTA</button>
-                    </div>
 
                     <div style="background:white; padding:20px; border-radius:10px; border:1px solid var(--border);">
                         <div
@@ -1806,6 +1801,8 @@
                         <div id="containerStatsFirme">
                             <div class="loader"></div>
                         </div>
+                    </div>
+
                     </div>
 
                 </div>
@@ -2448,6 +2445,30 @@
                             style="padding: 10px 20px;">Annulla</button>
                         <button id="customConfirmBtn" class="btn-primary"
                             style="padding: 10px 20px; background: #2563eb; border: none;">Conferma</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- MODALE SCELTA INVITATI CONFERMA EVENTO -->
+            <div id="confermaInvitoModal" class="fullscreen-view hidden"
+                style="background: rgba(15, 23, 42, 0.6); z-index: 9999; position: fixed; top: 0; left: 0; width: 100%; height: 100%; align-items: center; justify-content: center; backdrop-filter: blur(2px);">
+                <div
+                    style="background: white; padding: 25px; border-radius: 12px; max-width: 420px; width: 90%; text-align: center; box-shadow: 0 10px 25px rgba(0,0,0,0.2);">
+                    <div style="font-size: 40px; margin-bottom: 10px;">📨</div>
+                    <h3 style="margin: 0 0 10px 0; color: #0f172a; font-size: 18px;">Chi invitare?</h3>
+                    <p style="color: #64748b; font-size: 14px; margin: 0 0 6px 0;">Evento del <strong
+                            id="confermaInvitoOrario"></strong></p>
+                    <p style="color: #64748b; font-size: 14px; margin-bottom: 20px;">Vuoi invitare solo chi ha risposto
+                        Sì a questa data e ora, oppure tutti quelli che hanno risposto Sì?</p>
+                    <div style="display: flex; flex-direction: column; gap: 8px;">
+                        <button class="btn-primary" onclick="inviaConfermaEventoProposto(true)"
+                            style="padding: 10px 20px; background: #2563eb; border: none;">Solo chi ha detto Sì a
+                            questa data e ora</button>
+                        <button class="btn-primary" onclick="inviaConfermaEventoProposto(false)"
+                            style="padding: 10px 20px; background: #7c3aed; border: none;">Tutti quelli che hanno detto
+                            Sì</button>
+                        <button class="btn-secondary" onclick="chiudiConfermaInvito()"
+                            style="padding: 10px 20px;">Annulla</button>
                     </div>
                 </div>
             </div>

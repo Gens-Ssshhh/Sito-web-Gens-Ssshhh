@@ -821,19 +821,25 @@ function formattaOraSmart(value) {
     return numeri.slice(0, 2) + ':' + numeri.slice(2, 4);
 }
 
+function tipoMascheraInputSmart(input) {
+    var ruolo = input.getAttribute('data-role') || '';
+    if (/(^|-)data$/.test(ruolo)) return 'data';
+    if (/(^|-)ora$/.test(ruolo)) return 'ora';
+    return '';
+}
+
 function applicaMascheraInputSmart(input) {
     if (!input) return;
 
-    var ruolo = input.getAttribute('data-role');
-    if (!ruolo) return;
+    var tipo = tipoMascheraInputSmart(input);
 
-    if (ruolo === 'data') {
+    if (tipo === 'data') {
         input.setAttribute('inputmode', 'numeric');
         input.setAttribute('maxlength', '10');
         input.value = formattaDataSmart(input.value);
     }
 
-    if (ruolo === 'ora') {
+    if (tipo === 'ora') {
         input.setAttribute('inputmode', 'numeric');
         input.setAttribute('maxlength', '5');
         input.value = formattaOraSmart(input.value);
@@ -844,13 +850,9 @@ document.addEventListener('input', function (event) {
     var target = event.target;
     if (!(target instanceof HTMLElement)) return;
 
-    if (target.getAttribute('data-role') === 'data') {
-        target.value = formattaDataSmart(target.value);
-    }
-
-    if (target.getAttribute('data-role') === 'ora') {
-        target.value = formattaOraSmart(target.value);
-    }
+    var tipo = tipoMascheraInputSmart(target);
+    if (tipo === 'data') target.value = formattaDataSmart(target.value);
+    if (tipo === 'ora') target.value = formattaOraSmart(target.value);
 });
 
 function toggleSidebar() {
@@ -4980,6 +4982,25 @@ function escapeTestoEvento(valore) {
     });
 }
 
+function htmlFormVotoEvento_(id, opzioniHtml, miaScelta, preferenzeAperte) {
+    return '<div class="event-vote-form" data-event-id="' + id + '">' +
+        '<div class="event-vote-actions" aria-label="Rispondi alla proposta">' +
+        '<button type="button" class="event-vote-choice event-vote-yes' + (miaScelta === 'si' ? ' is-selected' : '') + '" data-choice="si">👍 Sì, partecipo</button>' +
+        '<button type="button" class="event-vote-choice event-vote-no' + (miaScelta === 'no' ? ' is-selected' : '') + '" data-choice="no">No</button></div>' +
+        '<details class="event-preference-details"' + (preferenzeAperte ? ' open' : '') + '><summary>Preferenze di data e ora (facoltative)</summary>' +
+        '<div class="event-preferences"><strong>Quali date e orari preferisci?</strong>' + opzioniHtml + '</div></details></div>';
+}
+
+function htmlAggiungiOpzioneEvento_() {
+    return '<details class="event-add-option-details"><summary>Proponi un’altra data e ora</summary>' +
+        '<div class="event-add-option-fields">' +
+        '<input type="text" data-role="nuova-data" inputmode="numeric" maxlength="10" placeholder="dd/mm/aaaa" aria-label="Data">' +
+        '<input type="text" data-role="nuova-ora" inputmode="numeric" maxlength="5" placeholder="hh:mm" aria-label="Ora">' +
+        '<input type="text" data-role="nuovo-luogo" placeholder="Luogo (facoltativo)" aria-label="Luogo">' +
+        '<button type="button" class="compact-action event-add-option-submit">Aggiungi opzione</button></div>' +
+        '<p class="event-add-option-notice">Gli altri partecipanti riceveranno un invito a rispondere di nuovo.</p></details>';
+}
+
 function renderProposteEventi(proposte) {
     var list = document.getElementById('eventiPropostiList');
     if (!list) return;
@@ -5010,32 +5031,42 @@ function renderProposteEventi(proposte) {
             ? '<details class="event-results-details"><summary>Risultati per data e ora</summary><p>' + Number(interesse.si || 0) + ' risposte Sì · preferenze facoltative</p><ol>' +
             risultatiOrdinati.map(function (risultato) {
                 var classePrincipale = preferenzeMassime > 0 && risultato.voti === preferenzeMassime ? ' event-result-leading' : '';
-                return '<li class="event-result-option' + classePrincipale + '"><span><strong>' +
+                var votantiOpzione = Array.isArray(proposta.votantiPerOpzione) && Array.isArray(proposta.votantiPerOpzione[risultato.indice])
+                    ? proposta.votantiPerOpzione[risultato.indice] : [];
+                var dettagliVotanti = votantiOpzione.length
+                    ? '<ul class="event-result-voters">' + votantiOpzione.map(function (nome) { return '<li>' + escapeTestoEvento(nome) + '</li>'; }).join('') + '</ul>'
+                    : '<p class="event-result-voters-empty">' + (risultato.voti > 0 ? 'Dettagli non disponibili per le preferenze espresse in precedenza.' : 'Nessuna preferenza per questa data e ora.') + '</p>';
+                return '<li class="event-result-option' + classePrincipale + '"><details><summary><span><strong>' +
                     escapeTestoEvento(risultato.opzione.data || 'Data da definire') + ' · ' + escapeTestoEvento(risultato.opzione.ora || 'Ora da definire') +
                     '</strong><small>' + escapeTestoEvento(risultato.opzione.luogo || 'Luogo non specificato') + '</small></span><b>' +
                     risultato.voti + (risultato.voti === 1 ? ' preferenza' : ' preferenze') +
-                    (classePrincipale ? '<em>Più votata</em>' : '') + '</b></li>';
+                    (classePrincipale ? '<em>Più votata</em>' : '') + '</b></summary>' + dettagliVotanti + '</details></li>';
             }).join('') + '</ol></details>'
             : '';
+        var mioVoto = proposta.mioVoto || null;
+        var miePreferenze = mioVoto && Array.isArray(mioVoto.opzioni)
+            ? mioVoto.opzioni.map(Number).filter(function (indice) { return Number.isInteger(indice) && indice >= 0 && indice < opzioni.length; })
+            : [];
+        var miaScelta = mioVoto ? (mioVoto.interesse === 'no' ? 'no' : 'si') : '';
         var opzioniHtml = opzioni.map(function (opzione, indice) {
-            return '<label class="event-vote-option"><input type="checkbox" data-role="preferenza" value="' + indice + '">' +
+            var selezionata = miePreferenze.indexOf(indice) !== -1 ? ' checked' : '';
+            return '<label class="event-vote-option"><input type="checkbox" data-role="preferenza" value="' + indice + '"' + selezionata + '>' +
                 '<span><strong>' + escapeTestoEvento(opzione.data || 'Data da definire') + ' · ' + escapeTestoEvento(opzione.ora || 'Ora da definire') +
                 '</strong><small>' + escapeTestoEvento(opzione.luogo || 'Luogo non specificato') + ' · ' + Number(preferenze[indice] || 0) + ' preferenze</small></span></label>';
         }).join('');
-        var editorOpzione = '<div class="event-add-option-box"><button type="button" class="compact-action event-add-option-toggle">Proponi un’altra data/ora</button>' +
-            '<div class="event-add-option-editor" hidden><div class="event-option-fields">' +
-            '<input type="text" data-role="nuova-data" inputmode="numeric" maxlength="10" placeholder="dd/mm/aaaa">' +
-            '<input type="text" data-role="nuova-ora" inputmode="numeric" maxlength="5" placeholder="hh:mm">' +
-            '</div><div class="event-option-actions"><button type="button" class="event-add-location-toggle">Aggiungi luogo</button></div>' +
-            '<button type="button" class="btn-secondary event-add-option-submit">Aggiungi opzione al voto</button></div></div>';
-        var votoEsistente = proposta.mioVoto
-            ? '<p class="event-vote-confirmation" role="status">Hai già risposto a questa proposta.</p>'
-            : '<div class="event-vote-form" data-event-id="' + id + '">' +
-            '<div class="event-vote-actions" aria-label="Rispondi alla proposta">' +
-            '<button type="button" class="event-vote-choice event-vote-yes" data-choice="si">👍 Sì, partecipo</button>' +
-            '<button type="button" class="event-vote-choice event-vote-no" data-choice="no">No</button></div>' +
-            '<details class="event-preference-details"><summary>Preferenze di data e ora (facoltative)</summary>' +
-            '<div class="event-preferences"><strong>Quali date e orari preferisci?</strong>' + opzioniHtml + editorOpzione + '</div></details></div>';
+        var votoEsistente;
+        if (proposta.ricompilazioneRichiesta) {
+            votoEsistente = '<div class="event-refill-banner" data-event-id="' + id + '" role="alert">' +
+                '<p><strong>Date, orari o luoghi sono cambiati.</strong> Le tue risposte precedenti, se ancora presenti, sono già selezionate: ricontrollale, cambiale o aggiungi nuove date.</p>' +
+                '<div class="event-refill-actions">' +
+                '<button type="button" class="btn-secondary event-refill-no">Mantieni la mia risposta</button></div></div>' +
+                htmlFormVotoEvento_(id, opzioniHtml, miaScelta, miePreferenze.length > 0);
+        } else if (mioVoto) {
+            votoEsistente = '<p class="event-vote-confirmation" role="status">Hai già risposto a questa proposta.</p>';
+        } else {
+            votoEsistente = htmlFormVotoEvento_(id, opzioniHtml, '', false);
+        }
+        var aggiungiOpzioneHtml = proposta.creatore ? '' : htmlAggiungiOpzioneEvento_();
         var opzioneFinale = opzioni[opzioneVincente] || {};
         var confermaHtml = proposta.creatore && Number(interesse.si || 0) > 0
             ? '<section class="event-confirm-panel"><h5>Conferma evento</h5><p>Opzione più scelta, modificabile. Sarà creato un evento di 2 ore con invito a chi ha risposto Sì.</p>' +
@@ -5058,6 +5089,7 @@ function renderProposteEventi(proposte) {
                 '<strong>Opzioni data e ora</strong><div class="event-options-editor">' + opzioni.map(function (opzione, indice) {
                     return htmlRigaModificaOpzione_(opzione, indice);
                 }).join('') + '</div>' +
+                '<p class="event-edit-notice">Se cambi date, orari o luoghi, chi ha già risposto riceverà una richiesta per ricompilare la risposta.</p>' +
                 '<button type="button" class="compact-action event-edit-add-option">+ Aggiungi opzione</button>' +
                 '<button type="submit" class="btn-primary">Salva modifiche</button></form></details></div></details>';
         }
@@ -5068,7 +5100,7 @@ function renderProposteEventi(proposte) {
             '<p>' + escapeTestoEvento(proposta.descrizione || '') + '</p></div><div class="event-card-actions">' + toolsHtml + '</div></header>' + editorCreatore +
             '<div class="event-proposal-counts"><span class="event-count-yes"><span aria-hidden="true">👍</span><strong>' + Number(interesse.si || 0) + '</strong> interessati</span>' +
             '<span class="event-count-no"><span aria-hidden="true">👎</span><strong>' + Number(interesse.no || 0) + '</strong> non interessati</span></div>' +
-            riepilogoOpzioniHtml + votoEsistente + '</article>';
+            riepilogoOpzioniHtml + votoEsistente + aggiungiOpzioneHtml + '</article>';
     }).join('');
 
     list.querySelectorAll('.event-vote-form').forEach(function (form) {
@@ -5118,7 +5150,68 @@ function renderProposteEventi(proposte) {
             annullaPropostaEvento(button.closest('.event-proposal-card').getAttribute('data-proposal-id'));
         });
     });
-    collegaEditorOpzioniAggiuntive_(list);
+    list.querySelectorAll('.event-refill-banner').forEach(function (banner) {
+        banner.querySelector('.event-refill-no').addEventListener('click', function (event) {
+            rispondiRichiestaRicompilazioneEvento(banner.getAttribute('data-event-id'), false, event.currentTarget);
+        });
+    });
+    list.querySelectorAll('.event-proposal-card').forEach(function (card) {
+        var submit = card.querySelector('.event-add-option-submit');
+        if (!submit) return;
+        submit.addEventListener('click', function () {
+            aggiungiOpzioneVotoEvento(card.getAttribute('data-proposal-id'), submit);
+        });
+    });
+}
+
+function leggiNuovaOpzioneEvento_(contenitore) {
+    var dataInput = contenitore.querySelector('[data-role="nuova-data"]');
+    var oraInput = contenitore.querySelector('[data-role="nuova-ora"]');
+    var luogoInput = contenitore.querySelector('[data-role="nuovo-luogo"]');
+    var data = dataInput ? dataInput.value.trim() : '';
+    var ora = oraInput ? oraInput.value.trim() : '';
+    if (!/^\d{2}\/\d{2}\/\d{4}$/.test(data) || !/^\d{2}:\d{2}$/.test(ora)) {
+        showToast('Inserisci una data (dd/mm/aaaa) e un orario (hh:mm) validi.', 'error');
+        return null;
+    }
+    return { data: data, ora: ora, luogo: luogoInput ? luogoInput.value.trim() : '' };
+}
+
+async function aggiungiOpzioneVotoEvento(propostaId, pulsante) {
+    var dettagli = pulsante.closest('.event-add-option-details');
+    var nuovaOpzione = leggiNuovaOpzioneEvento_(dettagli);
+    if (!nuovaOpzione) return;
+    pulsante.disabled = true;
+    var result = await chiamaServer('aggiungiOpzionePropostaEvento', [curEmail, propostaId, nuovaOpzione], true).catch(function (error) {
+        showToast(error.message || 'Opzione non aggiunta.', 'error');
+        return null;
+    });
+    pulsante.disabled = false;
+    if (!result || !result.ok) {
+        if (result) showToast(messaggioErroreVotoEvento(result.messaggio), 'error');
+        return;
+    }
+    var avviso = result.ricompilazioniRichieste
+        ? 'Opzione aggiunta. Gli altri partecipanti sono stati invitati a rispondere di nuovo.'
+        : 'Opzione aggiunta.';
+    showToast(avviso, 'success');
+    caricaProposteEventi();
+}
+
+async function rispondiRichiestaRicompilazioneEvento(propostaId, ricompila, pulsante) {
+    var pulsanti = pulsante.closest('.event-refill-banner').querySelectorAll('button');
+    pulsanti.forEach(function (button) { button.disabled = true; });
+    var result = await chiamaServer('ricompilaVotoPropostaEvento', [curEmail, propostaId, ricompila], true).catch(function (error) {
+        showToast(error.message || 'Risposta non registrata.', 'error');
+        return null;
+    });
+    if (!result || !result.ok) {
+        pulsanti.forEach(function (button) { button.disabled = false; });
+        if (result) showToast(messaggioErroreVotoEvento(result.messaggio), 'error');
+        return;
+    }
+    showToast(ricompila ? 'Puoi ricompilare la tua risposta.' : 'Risposta confermata.', 'success');
+    caricaProposteEventi();
 }
 
 function htmlRigaModificaOpzione_(opzione, index) {
@@ -5167,7 +5260,8 @@ async function salvaModifichePropostaEvento_(form) {
     });
     if (!result) return;
     if (!result.ok) return showToast(result.messaggio || 'Modifiche non salvate.', 'error');
-    showToast('Proposta aggiornata.', 'success');
+    var richieste = Number(result.ricompilazioniRichieste || 0);
+    showToast(richieste ? 'Proposta aggiornata. Richieste di ricompilazione inviate: ' + richieste + '.' : 'Proposta aggiornata.', 'success');
     caricaProposteEventi();
 }
 
@@ -5183,18 +5277,34 @@ async function annullaPropostaEvento(propostaId) {
     caricaProposteEventi();
 }
 
-async function confermaEventoProposto(form) {
-    if (!confirm('Confermi questa data e ora? Verrà creato un evento di due ore e saranno invitati tutti quelli che hanno risposto Sì.')) return;
+var confermaInvitoInCorso = null;
+
+function confermaEventoProposto(form) {
     var opzione = {
         data: form.querySelector('[data-role="final-data"]').value.trim(),
         ora: form.querySelector('[data-role="final-ora"]').value.trim(),
         luogo: form.querySelector('[data-role="final-luogo"]').value.trim()
     };
+    confermaInvitoInCorso = { form: form, opzione: opzione };
+    document.getElementById('confermaInvitoOrario').innerText = opzione.data + ' alle ' + opzione.ora;
+    document.getElementById('confermaInvitoModal').classList.remove('hidden');
+}
+
+function chiudiConfermaInvito() {
+    document.getElementById('confermaInvitoModal').classList.add('hidden');
+    confermaInvitoInCorso = null;
+}
+
+async function inviaConfermaEventoProposto(soloDataSelezionata) {
+    var richiesta = confermaInvitoInCorso;
+    chiudiConfermaInvito();
+    if (!richiesta) return;
     var result = await chiamaServer('confermaEventoProposto', {
         email: curEmail,
         password: curPass,
-        propostaId: form.getAttribute('data-event-id'),
-        opzione: opzione
+        propostaId: richiesta.form.getAttribute('data-event-id'),
+        opzione: richiesta.opzione,
+        soloDataSelezionata: soloDataSelezionata === true
     }, true).catch(function (error) {
         showToast(error.message || 'Non è stato possibile creare l’evento.', 'error');
         return null;
@@ -5203,77 +5313,6 @@ async function confermaEventoProposto(form) {
     if (!result.ok) return showToast(result.messaggio || 'Evento non creato.', 'error');
     showToast('Evento di 2 ore creato. Invitati: ' + Number(result.invitati || 0) + '.', 'success');
     caricaProposteEventi();
-}
-
-function collegaEditorOpzioniAggiuntive_(contenitore) {
-    contenitore.querySelectorAll('.event-add-option-toggle').forEach(function (button) {
-        button.addEventListener('click', function () {
-            var editor = button.nextElementSibling;
-            if (editor) editor.hidden = !editor.hidden;
-        });
-    });
-    contenitore.querySelectorAll('.event-add-location-toggle').forEach(function (button) {
-        button.addEventListener('click', function () {
-            var editor = button.closest('.event-add-option-editor');
-            var luogo = editor && editor.querySelector('[data-role="nuovo-luogo"]');
-            if (luogo) {
-                luogo.remove();
-                button.textContent = 'Aggiungi luogo';
-            } else if (editor) {
-                editor.querySelector('.event-option-fields').insertAdjacentHTML('beforeend', '<input type="text" data-role="nuovo-luogo" placeholder="Luogo (facoltativo)">');
-                button.textContent = 'Rimuovi luogo';
-            }
-        });
-    });
-    contenitore.querySelectorAll('.event-add-option-submit').forEach(function (button) {
-        button.addEventListener('click', function () { salvaOpzioneAggiuntaEvento_(button); });
-    });
-}
-
-async function salvaOpzioneAggiuntaEvento_(button) {
-    var editor = button.closest('.event-add-option-editor');
-    var card = button.closest('[data-event-id]');
-    if (!editor || !card) return;
-    var formEsterno = button.closest('#publicEventVoteForm');
-    var data = editor.querySelector('[data-role="nuova-data"]').value.trim();
-    var ora = editor.querySelector('[data-role="nuova-ora"]').value.trim();
-    var luogo = (editor.querySelector('[data-role="nuovo-luogo"]') || {}).value || '';
-    if (!data || !ora) return showToast('Inserisci data e ora per la nuova opzione.', 'error');
-    if (!data.match(/^(\d{2})\/(\d{2})\/(\d{4})$/) || !ora.match(/^(\d{2}):(\d{2})$/)) {
-        return showToast('Formato non valido: usa gg/mm/aaaa per la data e hh:mm per l’ora.', 'error');
-    }
-
-    var datiOspite = formEsterno ? {
-        nome: formEsterno.elements.nome.value.trim(),
-        email: formEsterno.elements.email.value.trim()
-    } : {};
-    var result = await chiamaServer('aggiungiOpzionePropostaEvento', [formEsterno ? '' : curEmail, card.getAttribute('data-event-id'), {
-        data: data,
-        ora: ora,
-        luogo: String(luogo).trim(),
-        nome: datiOspite.nome,
-        email: datiOspite.email
-    }], true).catch(function (error) {
-        showToast(error.message || 'Non è stato possibile aggiungere l’opzione.', 'error');
-        return null;
-    });
-    if (!result) return;
-    if (!result.ok) return showToast(result.messaggio || 'Non è stato possibile aggiungere l’opzione.', 'error');
-
-    var preferences = card.querySelector('.event-preferences');
-    var option = result.opzione;
-    var label = document.createElement('label');
-    label.className = 'event-vote-option';
-    label.innerHTML = '<input type="checkbox" data-role="preferenza" value="' + Number(result.indice) + '"><span><strong>' +
-        escapeTestoEvento(option.data) + ' · ' + escapeTestoEvento(option.ora) + '</strong><small>' +
-        escapeTestoEvento(option.luogo || 'Luogo non specificato') + ' · 0 preferenze</small></span>';
-    var addBox = preferences.querySelector('.event-add-option-box');
-    preferences.insertBefore(label, addBox);
-    editor.querySelector('[data-role="nuova-data"]').value = '';
-    editor.querySelector('[data-role="nuova-ora"]').value = '';
-    if (editor.querySelector('[data-role="nuovo-luogo"]')) editor.querySelector('[data-role="nuovo-luogo"]').value = '';
-    editor.hidden = true;
-    showToast('Nuova opzione aggiunta alla votazione.', 'success');
 }
 
 function messaggioErroreVotoEvento(messaggio) {
@@ -5351,16 +5390,8 @@ async function apriVotoPubblicoEvento(propostaId) {
 
     var preferenze = (proposta.opzioni || []).map(function (opzione, indice) {
         var conteggio = proposta.voti && proposta.voti.opzioni ? Number(proposta.voti.opzioni[indice] || 0) : 0;
-        return '<label class="event-vote-option"><input type="checkbox" data-role="preferenza" value="' + indice + '">' +
-            '<span><strong>' + escapeTestoEvento(opzione.data || 'Data da definire') + ' · ' + escapeTestoEvento(opzione.ora || 'Ora da definire') +
-            '</strong><small>' + escapeTestoEvento(opzione.luogo || 'Luogo non specificato') + ' · ' + conteggio + ' preferenze</small></span></label>';
+        return htmlPreferenzaPubblicaEvento_(opzione, indice, conteggio, false);
     }).join('');
-    var editorOpzione = '<div class="event-add-option-box"><button type="button" class="compact-action event-add-option-toggle">Proponi un’altra data/ora</button>' +
-        '<div class="event-add-option-editor" hidden><div class="event-option-fields">' +
-        '<input type="text" data-role="nuova-data" inputmode="numeric" maxlength="10" placeholder="dd/mm/aaaa">' +
-        '<input type="text" data-role="nuova-ora" inputmode="numeric" maxlength="5" placeholder="hh:mm">' +
-        '</div><div class="event-option-actions"><button type="button" class="event-add-location-toggle">Aggiungi luogo</button></div>' +
-        '<button type="button" class="btn-secondary event-add-option-submit">Aggiungi opzione al voto</button></div></div>';
     var interesse = proposta.voti && proposta.voti.interesse || { si: 0, no: 0 };
     contenuto.innerHTML = '<span class="section-kicker">Proposta evento</span><h1>' + escapeTestoEvento(proposta.titolo) + '</h1>' +
         '<p class="public-event-description">' + escapeTestoEvento(proposta.descrizione) + '</p>' +
@@ -5368,11 +5399,13 @@ async function apriVotoPubblicoEvento(propostaId) {
         '<form id="publicEventVoteForm" data-event-id="' + escapeTestoEvento(proposta.id) + '">' +
         '<label class="public-event-field">Nome<input name="nome" autocomplete="name" required maxlength="100"></label>' +
         '<label class="public-event-field">E-mail<input name="email" type="email" autocomplete="email" required maxlength="254"></label>' +
+        '<p class="public-event-notice hidden" role="status"></p>' +
         '<div class="event-vote-actions" aria-label="Rispondi alla proposta">' +
         '<button type="button" class="event-vote-choice event-vote-yes" data-choice="si">👍 Sì, partecipo</button>' +
         '<button type="button" class="event-vote-choice event-vote-no" data-choice="no">No</button></div>' +
         '<details class="event-preference-details"><summary>Preferenze di data e ora (facoltative)</summary>' +
-        '<div class="event-preferences"><strong>Quali date e orari preferisci?</strong>' + preferenze + editorOpzione + '</div></details>' +
+        '<div class="event-preferences"><strong>Quali date e orari preferisci?</strong>' + preferenze + '</div></details>' +
+        htmlAggiungiOpzioneEvento_() +
         '<p class="public-event-privacy">L’e-mail serve solo a impedire voti duplicati e non viene mostrata agli altri partecipanti.</p></form>';
 
     var form = document.getElementById('publicEventVoteForm');
@@ -5381,7 +5414,68 @@ async function apriVotoPubblicoEvento(propostaId) {
             inviaVotoPubblicoEvento(form, button.getAttribute('data-choice'), button);
         });
     });
-    collegaEditorOpzioniAggiuntive_(form);
+    form.elements.email.addEventListener('change', function () {
+        precompilaRispostaOspite(form);
+    });
+    form.querySelector('.event-add-option-submit').addEventListener('click', function (event) {
+        aggiungiOpzionePubblicaEvento(form, event.currentTarget);
+    });
+}
+
+function htmlPreferenzaPubblicaEvento_(opzione, indice, conteggio, selezionata) {
+    return '<label class="event-vote-option"><input type="checkbox" data-role="preferenza" value="' + indice + '"' + (selezionata ? ' checked' : '') + '>' +
+        '<span><strong>' + escapeTestoEvento(opzione.data || 'Data da definire') + ' · ' + escapeTestoEvento(opzione.ora || 'Ora da definire') +
+        '</strong><small>' + escapeTestoEvento(opzione.luogo || 'Luogo non specificato') + ' · ' + conteggio + ' preferenze</small></span></label>';
+}
+
+async function precompilaRispostaOspite(form) {
+    var emailInput = form.elements.email;
+    var email = emailInput.value.trim();
+    var avviso = form.querySelector('.public-event-notice');
+    avviso.classList.add('hidden');
+    if (!email || !emailInput.checkValidity()) return;
+
+    var risposta = await chiamaServer('getRispostaRicompilazioneOspite', { id: form.getAttribute('data-event-id'), email: email });
+    if (!risposta || emailInput.value.trim() !== email) return;
+
+    if (risposta.nome && !form.elements.nome.value.trim()) form.elements.nome.value = risposta.nome;
+    var opzioniScelte = Array.isArray(risposta.opzioni) ? risposta.opzioni.map(Number) : [];
+    form.querySelectorAll('[data-role="preferenza"]').forEach(function (input) {
+        input.checked = opzioniScelte.indexOf(Number(input.value)) !== -1;
+    });
+    form.querySelectorAll('.event-vote-choice').forEach(function (button) {
+        button.classList.toggle('is-selected', button.getAttribute('data-choice') === risposta.interesse);
+    });
+    form.querySelector('.event-preference-details').open = opzioniScelte.length > 0;
+    avviso.textContent = 'Date, orari o luoghi sono cambiati, oppure hai già risposto. Le tue scelte precedenti, se ancora presenti, sono selezionate: puoi modificarle o aggiungerne altre.';
+    avviso.classList.remove('hidden');
+}
+
+async function aggiungiOpzionePubblicaEvento(form, pulsante) {
+    if (!form.reportValidity()) return;
+    var nuovaOpzione = leggiNuovaOpzioneEvento_(form.querySelector('.event-add-option-details'));
+    if (!nuovaOpzione) return;
+    nuovaOpzione.nome = form.elements.nome.value.trim();
+    nuovaOpzione.email = form.elements.email.value.trim();
+
+    pulsante.disabled = true;
+    var result = await chiamaServer('aggiungiOpzionePropostaEvento', ['', form.getAttribute('data-event-id'), nuovaOpzione], true).catch(function (error) {
+        showToast(error.message || 'Opzione non aggiunta.', 'error');
+        return null;
+    });
+    pulsante.disabled = false;
+    if (!result || !result.ok) {
+        if (result) showToast(messaggioErroreVotoEvento(result.messaggio), 'error');
+        return;
+    }
+
+    form.querySelector('.event-preferences').insertAdjacentHTML('beforeend', htmlPreferenzaPubblicaEvento_(result.opzione, result.indice, 0, true));
+    form.querySelector('.event-preference-details').open = true;
+    form.querySelector('[data-role="nuova-data"]').value = '';
+    form.querySelector('[data-role="nuova-ora"]').value = '';
+    form.querySelector('[data-role="nuovo-luogo"]').value = '';
+    form.querySelector('.event-add-option-details').open = false;
+    showToast('Opzione aggiunta. Seleziona di nuovo Sì o No per confermare la tua risposta.', 'success');
 }
 
 async function inviaVotoPubblicoEvento(form, interesse, pulsante) {

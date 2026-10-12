@@ -91,14 +91,117 @@ function leggiVotiEvento_(valore, opzioni, emailSocio) {
     }
   }
 
+  var ricompilazione = dati._ricompilazione && typeof dati._ricompilazione === 'object' ? dati._ricompilazione : {};
+
   return {
     riepilogo: {
       interesse: interesse,
       opzioni: opzioni.map(function (_, indice) { return Number(conteggiOpzioni[indice] || 0); })
     },
     votanti: votanti,
-    mioVoto: mioVoto
+    mioVoto: mioVoto,
+    ricompilazione: ricompilazione
   };
+}
+
+function datiVotiDaSalvare_(riepilogo, votanti, ricompilazione) {
+  var dati = { interesse: riepilogo.interesse, opzioni: riepilogo.opzioni, _votanti: votanti };
+  if (ricompilazione && Object.keys(ricompilazione).length) dati._ricompilazione = ricompilazione;
+  return dati;
+}
+
+function rimuoviContributoVotoEvento_(riepilogo, votanti, chiave) {
+  var precedente = votanti[chiave];
+  if (precedente === undefined) return;
+  var risposta = typeof precedente === 'number' ? { interesse: 'si', opzioni: [precedente] } : precedente;
+  if (risposta.interesse === 'si' || risposta.interesse === 'no') {
+    riepilogo.interesse[risposta.interesse] = Math.max(0, Number(riepilogo.interesse[risposta.interesse] || 0) - 1);
+  }
+  (Array.isArray(risposta.opzioni) ? risposta.opzioni : []).forEach(function (indice) {
+    var numero = Number(indice);
+    if (riepilogo.opzioni[numero] !== undefined) riepilogo.opzioni[numero] = Math.max(0, riepilogo.opzioni[numero] - 1);
+  });
+  delete votanti[chiave];
+}
+
+function chiaveOpzioneEvento_(opzione) {
+  return [opzione.data, opzione.ora, opzione.luogo || ''].join('|');
+}
+
+function slotOpzioneEvento_(opzione) {
+  return [opzione.data, opzione.ora].join('|');
+}
+
+function opzioniEventoCambiate_(vecchie, nuove) {
+  var prima = vecchie.map(chiaveOpzioneEvento_).sort().join('\n');
+  var dopo = nuove.map(chiaveOpzioneEvento_).sort().join('\n');
+  return prima !== dopo;
+}
+
+function haSlotDuplicatiEvento_(opzioni) {
+  return opzioni.some(function (opzione, indice) {
+    return opzioni.findIndex(function (altra) { return slotOpzioneEvento_(altra) === slotOpzioneEvento_(opzione); }) !== indice;
+  });
+}
+
+function chiaveRicompilazioneSocio_(ricompilazione, email) {
+  var candidate = ['socio:' + email, email];
+  for (var i = 0; i < candidate.length; i++) {
+    if (ricompilazione[candidate[i]] !== undefined) return candidate[i];
+  }
+  return null;
+}
+
+function contattoVotanteEvento_(chiave, risposta) {
+  if (chiave.indexOf('ospite:') === 0) {
+    var emailOspite = risposta && typeof risposta === 'object' ? String(risposta.email || '').trim().toLowerCase() : '';
+    return { socio: false, email: emailOspite };
+  }
+  return { socio: true, email: chiave.replace(/^socio:/, '').trim().toLowerCase() };
+}
+
+function nomiSociEvento_() {
+  var nomi = {};
+  var sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('soci');
+  if (!sheet) return nomi;
+  var rows = sheet.getDataRange().getValues();
+  if (!rows.length) return nomi;
+  var headers = rows[0].map(function (value) { return String(value).trim().toLowerCase(); });
+  var colonna = function (nome, predefinita) {
+    var indice = headers.indexOf(nome);
+    return indice >= 0 ? indice : predefinita;
+  };
+  var emailIndex = colonna('email', 2);
+  var nomeIndex = colonna('nome', 0);
+  var cognomeIndex = colonna('cognome', 4);
+  rows.slice(1).forEach(function (row) {
+    var email = String(row[emailIndex] || '').trim().toLowerCase();
+    if (email) nomi[email] = (String(row[nomeIndex] || '').trim() + ' ' + String(row[cognomeIndex] || '').trim()).trim();
+  });
+  return nomi;
+}
+
+function nomeVotanteEvento_(chiave, risposta, nomiSoci) {
+  if (chiave.indexOf('ospite:') === 0) return String(risposta.nome || '').trim() || 'Ospite';
+  var email = chiave.replace(/^socio:/, '').trim().toLowerCase();
+  return nomiSoci[email] || email;
+}
+
+function votantiPerOpzioneEvento_(votanti, opzioni) {
+  var nomiSoci = nomiSociEvento_();
+  var perOpzione = opzioni.map(function () { return []; });
+  Object.keys(votanti).forEach(function (chiave) {
+    var risposta = votanti[chiave];
+    if (!risposta || typeof risposta !== 'object' || !Array.isArray(risposta.opzioni)) return;
+    var nome = nomeVotanteEvento_(chiave, risposta, nomiSoci);
+    risposta.opzioni.forEach(function (indice) {
+      var numero = Number(indice);
+      if (Number.isInteger(numero) && perOpzione[numero]) perOpzione[numero].push(nome);
+    });
+  });
+  return perOpzione.map(function (nomi) {
+    return nomi.sort(function (a, b) { return a.localeCompare(b, 'it'); });
+  });
 }
 
 function preparaPropostaEvento_(row, email) {
@@ -113,7 +216,9 @@ function preparaPropostaEvento_(row, email) {
     opzioni: opzioni,
     creataIl: row[1] instanceof Date ? row[1].toISOString() : String(row[1] || ''),
     voti: voti.riepilogo,
+    votantiPerOpzione: socio ? votantiPerOpzioneEvento_(voti.votanti, opzioni) : [],
     mioVoto: voti.mioVoto,
+    ricompilazioneRichiesta: !!(socio && chiaveRicompilazioneSocio_(voti.ricompilazione, email)),
     creatore: String(row[2] || '').trim().toLowerCase() === String(email || '').trim().toLowerCase()
   };
 }
@@ -193,9 +298,11 @@ function modificaPropostaEvento(dati) {
     return { ok: false, messaggio: 'Inserisci titolo e almeno una data e un’ora valide.' };
   }
   if (opzioniNuove.length > 20) return { ok: false, messaggio: 'La proposta può contenere al massimo 20 opzioni.' };
+  if (haSlotDuplicatiEvento_(opzioniNuove)) return { ok: false, messaggio: 'Non puoi inserire due volte la stessa data e ora.' };
 
   var lock = LockService.getScriptLock();
   lock.waitLock(10000);
+  var esito;
   try {
     var sheet = getFoglioProposteEventi_();
     var values = sheet.getDataRange().getValues();
@@ -204,51 +311,77 @@ function modificaPropostaEvento(dati) {
     var row = values[rowIndex];
     if (String(row[2] || '').trim().toLowerCase() !== email) return { ok: false, messaggio: 'Solo il creatore può modificare questa proposta.' };
     if (String(row[7] || 'ATTIVA') !== 'ATTIVA') return { ok: false, messaggio: 'La proposta non è più modificabile.' };
-
-    var oldOptions = [];
-    try { oldOptions = JSON.parse(row[5] || '[]'); } catch (e) { }
-    var votes = {};
-    try { votes = JSON.parse(row[6] || '{}'); } catch (e) { }
-    var oldSummary = leggiVotiEvento_(row[6], oldOptions, '').riepilogo;
-    for (var votedIndex = 0; votedIndex < oldOptions.length; votedIndex++) {
-      if (Number(oldSummary.opzioni[votedIndex] || 0) === 0) continue;
-      var preserved = opzioniNuove.some(function (newOption) {
-        return newOption.data === oldOptions[votedIndex].data && newOption.ora === oldOptions[votedIndex].ora;
-      });
-      if (!preserved) return { ok: false, messaggio: 'Non puoi cambiare o rimuovere una data/ora che ha già ricevuto preferenze. Aggiungi una nuova opzione oppure modifica solo il luogo.' };
-    }
-    var mapping = oldOptions.map(function (oldOption) {
-      var index = opzioniNuove.findIndex(function (newOption) {
-        return newOption.data === oldOption.data && newOption.ora === oldOption.ora;
-      });
-      return index;
-    });
-    var counts = opzioniNuove.map(function () { return 0; });
-    oldSummary.opzioni.forEach(function (count, oldIndex) {
-      if (mapping[oldIndex] >= 0) counts[mapping[oldIndex]] += Number(count || 0);
-    });
-
-    var votanti = votes._votanti && typeof votes._votanti === 'object' ? votes._votanti : {};
-    Object.keys(votanti).forEach(function (key) {
-      var response = votanti[key];
-      if (typeof response === 'number') response = { interesse: 'si', opzioni: [response] };
-      if (!response || typeof response !== 'object') return;
-      var oldChoices = Array.isArray(response.opzioni) ? response.opzioni : [];
-      response.opzioni = oldChoices.map(Number).filter(function (oldIndex) {
-        return Number.isInteger(oldIndex) && mapping[oldIndex] >= 0;
-      }).map(function (oldIndex) { return mapping[oldIndex]; });
-      votanti[key] = response;
-    });
-
-    var voteData = { interesse: oldSummary.interesse, opzioni: counts, _votanti: votanti };
-    sheet.getRange(rowIndex + 1, 4).setValue(titolo);
-    sheet.getRange(rowIndex + 1, 5).setValue(descrizione);
-    sheet.getRange(rowIndex + 1, 6).setValue(JSON.stringify(opzioniNuove));
-    sheet.getRange(rowIndex + 1, 7).setValue(JSON.stringify(voteData));
-    return { ok: true };
+    esito = applicaModificaPropostaEvento_(sheet, rowIndex, row, email, titolo, descrizione, opzioniNuove);
   } finally {
     lock.releaseLock();
   }
+
+  inviaRichiestaRicompilazionePropostaEvento_(esito.contatti, titolo, dati.propostaId);
+  if (esito.cambiate) inviaConfermaModificaCreatorePropostaEvento_(email, titolo, esito.contatti.length);
+  return { ok: true, ricompilazioniRichieste: esito.contatti.length };
+}
+
+function inviaConfermaModificaCreatorePropostaEvento_(emailCreatore, titolo, numeroAvvisati) {
+  var messaggio = numeroAvvisati
+    ? 'Hai modificato date, orari o luoghi. Abbiamo avvisato ' + numeroAvvisati + (numeroAvvisati === 1 ? ' persona' : ' persone') + ' che avevano già risposto, chiedendo di ricompilare il questionario.'
+    : 'Hai modificato date, orari o luoghi. Non c\'è nessun altro votante da avvisare.';
+  try {
+    MailApp.sendEmail({
+      to: emailCreatore,
+      subject: 'Modifica salvata: ' + titolo,
+      body: messaggio + '\n\nGens Ssshhh',
+      name: 'Gens Ssshhh'
+    });
+  } catch (e) {
+    console.log('Invio conferma modifica al creatore non completato: ' + e);
+  }
+}
+
+function applicaModificaPropostaEvento_(sheet, rowIndex, row, creatore, titolo, descrizione, opzioniNuove, chiaveAutore) {
+  var oldOptions = [];
+  try { oldOptions = JSON.parse(row[5] || '[]'); } catch (e) { }
+  var oldVoti = leggiVotiEvento_(row[6], oldOptions, '');
+  var oldSummary = oldVoti.riepilogo;
+  var cambiate = opzioniEventoCambiate_(oldOptions, opzioniNuove);
+
+  var mapping = oldOptions.map(function (oldOption) {
+    return opzioniNuove.findIndex(function (newOption) {
+      return slotOpzioneEvento_(newOption) === slotOpzioneEvento_(oldOption);
+    });
+  });
+  var counts = opzioniNuove.map(function () { return 0; });
+  oldSummary.opzioni.forEach(function (count, oldIndex) {
+    if (mapping[oldIndex] >= 0) counts[mapping[oldIndex]] += Number(count || 0);
+  });
+
+  var votanti = oldVoti.votanti;
+  Object.keys(votanti).forEach(function (key) {
+    var response = votanti[key];
+    if (typeof response === 'number') response = { interesse: 'si', opzioni: [response] };
+    if (!response || typeof response !== 'object') return;
+    var oldChoices = Array.isArray(response.opzioni) ? response.opzioni : [];
+    response.opzioni = oldChoices.map(Number).filter(function (oldIndex) {
+      return Number.isInteger(oldIndex) && mapping[oldIndex] >= 0;
+    }).map(function (oldIndex) { return mapping[oldIndex]; });
+    votanti[key] = response;
+  });
+
+  var ricompilazione = oldVoti.ricompilazione;
+  var contatti = [];
+  if (cambiate) {
+    var richiestaIl = new Date().toISOString();
+    Object.keys(votanti).forEach(function (chiave) {
+      if (chiave === 'socio:' + creatore || chiave === creatore) return;
+      ricompilazione[chiave] = richiestaIl;
+      if (chiave !== chiaveAutore) contatti.push(contattoVotanteEvento_(chiave, votanti[chiave]));
+    });
+  }
+
+  sheet.getRange(rowIndex + 1, 4).setValue(titolo);
+  sheet.getRange(rowIndex + 1, 5).setValue(descrizione);
+  sheet.getRange(rowIndex + 1, 6).setValue(JSON.stringify(opzioniNuove));
+  sheet.getRange(rowIndex + 1, 7).setValue(JSON.stringify(datiVotiDaSalvare_({ interesse: oldSummary.interesse, opzioni: counts }, votanti, ricompilazione)));
+  return { contatti: contatti, cambiate: cambiate };
 }
 
 function annullaPropostaEvento(dati) {
@@ -274,6 +407,21 @@ function annullaPropostaEvento(dati) {
   }
 }
 
+function identitaVotanteEvento_(email, dati) {
+  var socio = String(email || '').trim().toLowerCase();
+  if (verificaSocioEvento_(socio)) return { chiave: 'socio:' + socio, email: socio, nome: '' };
+
+  var nome = String(dati.nome || '').trim();
+  var emailOspite = String(dati.email || '').trim().toLowerCase();
+  if (!nome || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(emailOspite)) {
+    return { errore: 'Per votare come ospite inserisci nome ed e-mail validi.' };
+  }
+  if (verificaSocioEvento_(emailOspite)) {
+    return { errore: 'Questa e-mail appartiene a un socio: accedi al portale per votare.' };
+  }
+  return { chiave: 'ospite:' + hashEmailEvento_(emailOspite), email: emailOspite, nome: nome };
+}
+
 function votaPropostaEvento(email, propostaId, risposta) {
   var socio = String(email || '').trim().toLowerCase();
   var rispostaVoto = typeof risposta === 'number'
@@ -281,21 +429,9 @@ function votaPropostaEvento(email, propostaId, risposta) {
     : (risposta || {});
   var interessato = String(rispostaVoto.interesse || '').toLowerCase();
   var opzioniScelte = Array.isArray(rispostaVoto.opzioni) ? rispostaVoto.opzioni : [];
-  var emailOspite = String(rispostaVoto.email || '').trim().toLowerCase();
-  var chiaveVotante;
-
-  if (verificaSocioEvento_(socio)) {
-    chiaveVotante = 'socio:' + socio;
-  } else {
-    var nomeOspite = String(rispostaVoto.nome || '').trim();
-    if (!nomeOspite || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(emailOspite)) {
-      return { ok: false, messaggio: 'Per votare come ospite inserisci nome ed e-mail validi.' };
-    }
-    if (verificaSocioEvento_(emailOspite)) {
-      return { ok: false, messaggio: 'Questa e-mail appartiene a un socio: accedi al portale per votare.' };
-    }
-    chiaveVotante = 'ospite:' + hashEmailEvento_(emailOspite);
-  }
+  var identita = identitaVotanteEvento_(socio, rispostaVoto);
+  if (identita.errore) return { ok: false, messaggio: identita.errore };
+  var chiaveVotante = identita.chiave;
 
   if (interessato !== 'si' && interessato !== 'no') {
     return { ok: false, messaggio: 'Indica se ti interessa partecipare.' };
@@ -323,38 +459,31 @@ function votaPropostaEvento(email, propostaId, risposta) {
 
     var votiEsistenti = leggiVotiEvento_(row[6], opzioni, socio);
     var votanti = votiEsistenti.votanti;
-    if (votanti[chiaveVotante] !== undefined || (socio && votanti[socio] !== undefined)) {
-      return { ok: false, messaggio: 'Hai già votato questa proposta.' };
+    var ricompilazione = votiEsistenti.ricompilazione;
+    var chiaveEsistente = votanti[chiaveVotante] !== undefined ? chiaveVotante : (socio && votanti[socio] !== undefined ? socio : null);
+    if (chiaveEsistente !== null) {
+      if (ricompilazione[chiaveEsistente] === undefined) {
+        return { ok: false, messaggio: 'Hai già votato questa proposta.' };
+      }
+      rimuoviContributoVotoEvento_(votiEsistenti.riepilogo, votanti, chiaveEsistente);
+      delete ricompilazione[chiaveEsistente];
     }
 
     var interesse = votiEsistenti.riepilogo.interesse;
     interesse[interessato]++;
     scelte.forEach(function (indice) { votiEsistenti.riepilogo.opzioni[indice]++; });
-    votanti[chiaveVotante] = { interesse: interessato, opzioni: scelte, email: emailOspite || socio };
+    votanti[chiaveVotante] = { interesse: interessato, opzioni: scelte, email: identita.email, nome: identita.nome };
 
-    var datiSalvati = {
-      interesse: interesse,
-      opzioni: votiEsistenti.riepilogo.opzioni,
-      _votanti: votanti
-    };
-    sheet.getRange(rowIndex + 1, 7).setValue(JSON.stringify(datiSalvati));
+    sheet.getRange(rowIndex + 1, 7).setValue(JSON.stringify(datiVotiDaSalvare_(votiEsistenti.riepilogo, votanti, ricompilazione)));
     return { ok: true, voti: votiEsistenti.riepilogo };
   } finally {
     lock.releaseLock();
   }
 }
 
-function aggiungiOpzionePropostaEvento(email, propostaId, opzione) {
+function ricompilaVotoPropostaEvento(email, propostaId, ricompila) {
   var socio = String(email || '').trim().toLowerCase();
-  opzione = opzione || {};
-  var emailOspite = String(opzione.email || '').trim().toLowerCase();
-  var nomeOspite = String(opzione.nome || '').trim();
-  if (!verificaSocioEvento_(socio)) {
-    if (!nomeOspite || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(emailOspite)) return { ok: false, messaggio: 'Per aggiungere una data come ospite inserisci nome ed e-mail validi.' };
-    if (verificaSocioEvento_(emailOspite)) return { ok: false, messaggio: 'Questa e-mail appartiene a un socio: accedi al portale.' };
-  }
-  var nuove = normalizzaOpzioniEvento_([opzione]);
-  if (!nuove.length || !dataOraEvento_(nuove[0])) return { ok: false, messaggio: 'Inserisci una data e un orario validi.' };
+  if (!verificaSocioEvento_(socio)) return { ok: false, messaggio: 'Solo i soci attivi possono rispondere a questa richiesta.' };
 
   var lock = LockService.getScriptLock();
   lock.waitLock(10000);
@@ -364,27 +493,108 @@ function aggiungiOpzionePropostaEvento(email, propostaId, opzione) {
     var rowIndex = values.findIndex(function (row, index) {
       return index > 0 && String(row[0]) === String(propostaId) && String(row[7] || 'ATTIVA') === 'ATTIVA';
     });
-    if (rowIndex < 1) return { ok: false, messaggio: 'Proposta non trovata o già confermata.' };
-    var row = values[rowIndex];
-    var options = JSON.parse(row[5] || '[]');
-    if (options.length >= 20) return { ok: false, messaggio: 'La proposta ha già raggiunto il limite di 20 opzioni.' };
-    if (options.some(function (existing) {
-      return existing.data === nuove[0].data && existing.ora === nuove[0].ora;
-    })) return { ok: false, messaggio: 'Questa data e ora sono già state proposte.' };
+    if (rowIndex < 1) return { ok: false, messaggio: 'Proposta non trovata o già chiusa.' };
 
-    options.push(nuove[0]);
-    var votes = leggiVotiEvento_(row[6], options.slice(0, -1), socio);
-    votes.riepilogo.opzioni.push(0);
-    sheet.getRange(rowIndex + 1, 6).setValue(JSON.stringify(options));
-    sheet.getRange(rowIndex + 1, 7).setValue(JSON.stringify({
-      interesse: votes.riepilogo.interesse,
-      opzioni: votes.riepilogo.opzioni,
-      _votanti: votes.votanti
-    }));
-    return { ok: true, indice: options.length - 1, opzione: nuove[0] };
+    var row = values[rowIndex];
+    var opzioni = [];
+    try { opzioni = JSON.parse(row[5] || '[]'); } catch (e) { }
+    var voti = leggiVotiEvento_(row[6], opzioni, socio);
+    var chiaveRichiesta = chiaveRicompilazioneSocio_(voti.ricompilazione, socio);
+    if (chiaveRichiesta === null) return { ok: false, messaggio: 'Non risulta una richiesta di ricompilazione per questo evento.' };
+
+    var vuoleRicompilare = ricompila === true || ricompila === 'true';
+    delete voti.ricompilazione[chiaveRichiesta];
+    if (vuoleRicompilare) rimuoviContributoVotoEvento_(voti.riepilogo, voti.votanti, chiaveRichiesta);
+
+    sheet.getRange(rowIndex + 1, 7).setValue(JSON.stringify(datiVotiDaSalvare_(voti.riepilogo, voti.votanti, voti.ricompilazione)));
+    return { ok: true, ricompilato: vuoleRicompilare };
   } finally {
     lock.releaseLock();
   }
+}
+
+function aggiungiOpzionePropostaEvento(email, propostaId, opzione) {
+  opzione = opzione || {};
+  var votante = identitaVotanteEvento_(email, opzione);
+  if (votante.errore) return { ok: false, messaggio: votante.errore };
+  var nuova = normalizzaOpzioniEvento_([{ data: opzione.data, ora: opzione.ora, luogo: opzione.luogo }]);
+  if (!nuova.length || !dataOraEvento_(nuova[0])) return { ok: false, messaggio: 'Inserisci una data e un orario validi.' };
+
+  var lock = LockService.getScriptLock();
+  lock.waitLock(10000);
+  var esito;
+  var titolo = '';
+  var creatore = '';
+  var indice = 0;
+  try {
+    var sheet = getFoglioProposteEventi_();
+    var values = sheet.getDataRange().getValues();
+    var rowIndex = values.findIndex(function (row, index) {
+      return index > 0 && String(row[0]) === String(propostaId) && String(row[7] || 'ATTIVA') === 'ATTIVA';
+    });
+    if (rowIndex < 1) return { ok: false, messaggio: 'Proposta non trovata o già confermata.' };
+    var row = values[rowIndex];
+    titolo = String(row[3] || '');
+    creatore = String(row[2] || '').trim().toLowerCase();
+
+    var options = [];
+    try { options = JSON.parse(row[5] || '[]'); } catch (e) { }
+    if (options.length >= 20) return { ok: false, messaggio: 'La proposta ha già raggiunto il limite di 20 opzioni.' };
+    if (options.some(function (existing) { return slotOpzioneEvento_(existing) === slotOpzioneEvento_(nuova[0]); })) {
+      return { ok: false, messaggio: 'Questa data e ora sono già state proposte.' };
+    }
+
+    indice = options.length;
+    esito = applicaModificaPropostaEvento_(sheet, rowIndex, row, creatore, titolo, String(row[4] || ''), options.concat(nuova), votante.chiave);
+  } finally {
+    lock.releaseLock();
+  }
+
+  inviaRichiestaRicompilazionePropostaEvento_(esito.contatti, titolo, propostaId);
+  if (votante.chiave !== 'socio:' + creatore) {
+    var nomeAutore = votante.nome || nomiSociEvento_()[votante.email] || votante.email;
+    inviaAggiuntaOpzioneAlCreatorePropostaEvento_(creatore, titolo, nomeAutore, nuova[0]);
+  }
+  return { ok: true, indice: indice, opzione: nuova[0], ricompilazioniRichieste: esito.contatti.length };
+}
+
+function inviaAggiuntaOpzioneAlCreatorePropostaEvento_(emailCreatore, titolo, nomeAutore, opzione) {
+  var luogo = opzione.luogo ? ' · ' + opzione.luogo : '';
+  try {
+    MailApp.sendEmail({
+      to: emailCreatore,
+      subject: 'Nuova data proposta: ' + titolo,
+      body: nomeAutore + ' ha proposto una nuova data per "' + titolo + '": ' + opzione.data + ' alle ' + opzione.ora + luogo + '.\n\nGli altri votanti sono stati invitati a rispondere di nuovo.\n\nGens Ssshhh',
+      name: 'Gens Ssshhh'
+    });
+  } catch (e) {
+    console.log('Invio avviso nuova opzione al creatore non completato: ' + e);
+  }
+}
+
+function getRispostaRicompilazioneOspite(dati) {
+  dati = dati || {};
+  var id = String(dati.id || dati.propostaId || '');
+  var emailOspite = String(dati.email || '').trim().toLowerCase();
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(emailOspite) || verificaSocioEvento_(emailOspite)) return null;
+
+  var chiave = 'ospite:' + hashEmailEvento_(emailOspite);
+  var values = getFoglioProposteEventi_().getDataRange().getValues();
+  var row = values.find(function (item, index) {
+    return index > 0 && String(item[0]) === id && String(item[7] || 'ATTIVA') === 'ATTIVA';
+  });
+  if (!row) return null;
+
+  var opzioni = [];
+  try { opzioni = JSON.parse(row[5] || '[]'); } catch (e) { }
+  var voti = leggiVotiEvento_(row[6], opzioni, '');
+  var risposta = voti.votanti[chiave];
+  if (voti.ricompilazione[chiave] === undefined || !risposta || typeof risposta !== 'object') return null;
+
+  var indici = (Array.isArray(risposta.opzioni) ? risposta.opzioni : []).map(Number).filter(function (indice) {
+    return Number.isInteger(indice) && indice >= 0 && indice < opzioni.length;
+  });
+  return { nome: String(risposta.nome || ''), interesse: risposta.interesse === 'no' ? 'no' : 'si', opzioni: indici };
 }
 
 function confermaEventoProposto(dati) {
@@ -415,18 +625,41 @@ function confermaEventoProposto(dati) {
     var votes = {};
     try { votes = JSON.parse(row[6] || '{}'); } catch (e) { }
     var confirmed = votes._votanti || {};
+    var soloDataSelezionata = dati.soloDataSelezionata === true;
+    var indiciDataSelezionata = [];
+    if (soloDataSelezionata) {
+      var opzioniProposta = [];
+      try { opzioniProposta = JSON.parse(row[5] || '[]'); } catch (e) { }
+      var slotScelto = slotOpzioneEvento_(opzioneFinale);
+      opzioniProposta.forEach(function (opzioneProposta, indice) {
+        if (slotOpzioneEvento_({
+          data: String(opzioneProposta.data || '').trim(),
+          ora: String(opzioneProposta.ora || '').trim()
+        }) === slotScelto) indiciDataSelezionata.push(indice);
+      });
+    }
     var attendees = [];
     Object.keys(confirmed).forEach(function (key) {
       var response = confirmed[key];
       if (typeof response === 'number') {
-        if (response < 0) return;
+        if (response < 0 || soloDataSelezionata) return;
       } else if (!response || response.interesse !== 'si') return;
+      if (soloDataSelezionata && !(response.opzioni || []).some(function (indice) {
+        return indiciDataSelezionata.indexOf(indice) >= 0;
+      })) return;
       var address = String(typeof response === 'number'
         ? (key.indexOf('socio:') === 0 ? key.substring(6) : key)
         : (response.email || (key.indexOf('socio:') === 0 ? key.substring(6) : key))).trim().toLowerCase();
       if (/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(address) && attendees.indexOf(address) < 0) attendees.push(address);
     });
-    if (!attendees.length) return { ok: false, messaggio: 'Nessun partecipante ha risposto Sì.' };
+    if (!attendees.length) {
+      return {
+        ok: false,
+        messaggio: soloDataSelezionata
+          ? 'Nessun partecipante ha risposto Sì a questa data e ora.'
+          : 'Nessun partecipante ha risposto Sì.'
+      };
+    }
 
     var start = dataOraEvento_(opzioniFinali[0]);
     if (start.getTime() <= new Date().getTime()) return { ok: false, messaggio: 'Scegli una data e un orario futuri.' };
@@ -509,6 +742,50 @@ function inviaComunicazioniPropostaEvento_(emails, titolo, propostaId, promemori
     }
   } catch (e) {
     console.log('Invio push questionario evento non completato: ' + e);
+  }
+}
+
+function inviaRichiestaRicompilazionePropostaEvento_(contatti, titolo, propostaId) {
+  if (!contatti || !contatti.length) return;
+  var emails = [];
+  var emailSocie = [];
+  contatti.forEach(function (contatto) {
+    if (!contatto || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(contatto.email)) return;
+    if (emails.indexOf(contatto.email) < 0) emails.push(contatto.email);
+    if (contatto.socio && emailSocie.indexOf(contatto.email) < 0) emailSocie.push(contatto.email);
+  });
+  if (!emails.length) return;
+
+  var oggetto = 'Ricompila il questionario evento';
+  var testoEvento = escapeHtmlEvento_(titolo);
+  var url = 'https://gensssshhh-collab.github.io/Sito-web-Gens-Ssshhh/index.html?evento=' + encodeURIComponent(propostaId);
+  var intro = 'Il creatore ha modificato date, orari o luoghi di questo evento. Ti chiediamo di confermare di nuovo la tua disponibilità.';
+  var body = intro + '\n\n' + titolo + '\n\nApri il questionario: ' + url;
+  var htmlBody = '<div style="font-family:Arial,sans-serif;color:#243247;line-height:1.5">' +
+    '<p>' + intro + '</p><h2>' + testoEvento + '</h2><p><a href="' + url + '">Apri il questionario evento</a></p>' +
+    '<p>Gens Ssshhh</p></div>';
+
+  try {
+    for (var inizio = 0; inizio < emails.length; inizio += 40) {
+      MailApp.sendEmail({
+        to: 'undisclosed-recipients@gmail.com',
+        bcc: emails.slice(inizio, inizio + 40).join(','),
+        subject: oggetto + ': ' + titolo,
+        body: body,
+        htmlBody: htmlBody,
+        name: 'Gens Ssshhh'
+      });
+    }
+  } catch (e) {
+    console.log('Invio email ricompilazione evento non completato: ' + e);
+  }
+
+  try {
+    if (emailSocie.length && typeof inviaNotificaPush === 'function') {
+      inviaNotificaPush(oggetto, 'Ricompila la tua risposta per: ' + titolo, emailSocie, 'viewCalendario');
+    }
+  } catch (e) {
+    console.log('Invio push ricompilazione evento non completato: ' + e);
   }
 }
 

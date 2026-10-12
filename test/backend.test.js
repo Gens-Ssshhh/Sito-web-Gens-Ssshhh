@@ -651,6 +651,57 @@ test('eventi: ospiti votano interesse e più preferenze senza esporre le email',
   assert.deepEqual(context.getProposteEventi('').length, 0);
 });
 
+test('eventi: mostra ai soci chi ha scelto ogni data senza esporre le email', () => {
+  const sociSheet = dataSheet([
+    ['Nome', 'Password', 'Email', 'Cognome'],
+    ['Mario', 'hash', 'mario@example.it', 'Rossi']
+  ]);
+  const eventiRows = [['ID', 'CreatoIl', 'CreatoreEmail', 'Titolo', 'Descrizione', 'OpzioniJson', 'VotiJson', 'Stato']];
+  const eventiSheet = dataSheet(eventiRows);
+  eventiSheet.getRange = (row, column) => ({
+    setValue(value) { eventiRows[row - 1][column - 1] = value; }
+  });
+  const spreadsheet = {
+    getSheetByName: name => name === 'soci' ? sociSheet : name === 'ProposteEventi' ? eventiSheet : null,
+    insertSheet: () => eventiSheet
+  };
+  const context = {
+    SpreadsheetApp: { getActiveSpreadsheet: () => spreadsheet },
+    Utilities: {
+      getUuid: () => 'evento-nomi',
+      DigestAlgorithm: { SHA_256: 'SHA_256' },
+      computeDigest: (algorithm, value) => Array.from(Buffer.from(value, 'utf8').subarray(0, 4))
+    },
+    verificaLogin: () => 'OK_LOGIN',
+    LockService: { getScriptLock: () => ({ waitLock() { }, releaseLock() { } }) }
+  };
+
+  loadScript('Eventi.js', context);
+  context.creaPropostaEvento('mario@example.it', 'pw', {
+    titolo: 'Pizza',
+    descrizione: '',
+    opzioni: [
+      { data: '10/10/2026', ora: '20:00', luogo: 'Centro' },
+      { data: '11/10/2026', ora: '20:00', luogo: 'Centro' }
+    ]
+  });
+
+  context.votaPropostaEvento('mario@example.it', 'evento-nomi', { interesse: 'si', opzioni: [0] });
+  context.votaPropostaEvento('', 'evento-nomi', { nome: 'Giulia', email: 'ospite@example.net', interesse: 'si', opzioni: [0, 1] });
+
+  const propostaSocio = context.getProposteEventi('mario@example.it')[0];
+  assert.deepEqual(JSON.parse(JSON.stringify(propostaSocio.votantiPerOpzione)), [
+    ['Giulia', 'Mario Rossi'],
+    ['Giulia']
+  ]);
+  assert.equal(JSON.stringify(propostaSocio).includes('ospite@example.net'), false);
+
+  const propostaPubblica = context.getPropostaEventoPubblica('evento-nomi');
+  assert.deepEqual(JSON.parse(JSON.stringify(propostaPubblica.votantiPerOpzione)), []);
+  assert.equal(JSON.stringify(propostaPubblica).includes('Mario Rossi'), false);
+  assert.equal(JSON.stringify(propostaPubblica).includes('Giulia'), false);
+});
+
 test('eventi: aggiunge opzioni e crea Calendar di due ore per soli interessati', () => {
   const sociSheet = dataSheet([
     ['Nome', 'Password', 'Email'],
@@ -701,8 +752,20 @@ test('eventi: aggiunge opzioni e crea Calendar di due ore per soli interessati',
     titolo: 'Sushi', descrizione: '', opzioni: [{ data: '20/11/2026', ora: '12:00', luogo: '' }]
   });
   assert.equal(context.aggiungiOpzionePropostaEvento('', 'evento-calendar', {
-    nome: 'Paolo', email: 'paolo@example.net', data: '21/11/2026', ora: '13:00', luogo: ''
+    data: '21/11/2026', ora: '13:00', luogo: ''
+  }).ok, false);
+  assert.equal(context.aggiungiOpzionePropostaEvento('mario@example.it', 'evento-calendar', {
+    data: '21/11/2026', ora: '13:00', luogo: ''
   }).ok, true);
+  const aggiuntaSocio = context.aggiungiOpzionePropostaEvento('anna@example.it', 'evento-calendar', {
+    data: '22/11/2026', ora: '09:00', luogo: ''
+  });
+  assert.equal(aggiuntaSocio.ok, true);
+  assert.equal(aggiuntaSocio.indice, 2);
+  assert.equal(aggiuntaSocio.ricompilazioniRichieste, 0);
+  assert.equal(context.aggiungiOpzionePropostaEvento('mario@example.it', 'evento-calendar', {
+    data: '22/11/2026', ora: '09:00', luogo: ''
+  }).ok, false);
   assert.equal(context.votaPropostaEvento('mario@example.it', 'evento-calendar', { interesse: 'si', opzioni: [0] }).ok, true);
   assert.equal(context.votaPropostaEvento('', 'evento-calendar', {
     nome: 'Paolo', email: 'paolo@example.net', interesse: 'si', opzioni: [1]
@@ -728,6 +791,155 @@ test('eventi: aggiunge opzioni e crea Calendar di due ore per soli interessati',
   assert.equal(calendarOptions.sendInvites, true);
   assert.equal(eventiRows[1][7], 'CONFERMATA');
   assert.equal(eventiRows[1][8], 'calendar-event-1');
+});
+
+test('eventi: un votante aggiunge una data, il creatore riceve un avviso e gli altri votanti devono ricompilare', () => {
+  const sociSheet = dataSheet([
+    ['Nome', 'Password', 'Email'],
+    ['Mario', 'hash', 'mario@example.it'],
+    ['Anna', 'hash', 'anna@example.it']
+  ]);
+  const eventiRows = [['ID', 'CreatoIl', 'CreatoreEmail', 'Titolo', 'Descrizione', 'OpzioniJson', 'VotiJson', 'Stato', '', '']];
+  const eventiSheet = dataSheet(eventiRows);
+  eventiSheet.getRange = (row, column) => ({
+    setValue(value) {
+      while (eventiRows[row - 1].length < column) eventiRows[row - 1].push('');
+      eventiRows[row - 1][column - 1] = value;
+    }
+  });
+  const spreadsheet = {
+    getSheetByName: name => name === 'soci' ? sociSheet : name === 'ProposteEventi' ? eventiSheet : null,
+    insertSheet: () => eventiSheet
+  };
+  const posta = [];
+  const context = {
+    SpreadsheetApp: { getActiveSpreadsheet: () => spreadsheet },
+    Utilities: {
+      getUuid: () => 'evento-voto-aggiunta',
+      DigestAlgorithm: { SHA_256: 'SHA_256' },
+      computeDigest: (algorithm, value) => Array.from(Buffer.from(value, 'utf8').subarray(0, 4))
+    },
+    verificaLogin: dati => dati.password === 'pw' ? 'OK_LOGIN' : 'ERR_AUTH',
+    LockService: { getScriptLock: () => ({ waitLock() { }, releaseLock() { } }) },
+    MailApp: { sendEmail: messaggio => posta.push(messaggio) },
+    ScriptApp: { getProjectTriggers: () => [], newTrigger: () => ({ timeBased: () => ({ everyDays: () => ({ atHour: () => ({ create() { } }) }) }) }) }
+  };
+  loadScript('Eventi.js', context);
+
+  context.creaPropostaEvento('mario@example.it', 'pw', {
+    titolo: 'Cena', descrizione: '', opzioni: [{ data: '20/11/2026', ora: '12:00', luogo: '' }]
+  });
+  assert.equal(context.votaPropostaEvento('', 'evento-voto-aggiunta', {
+    nome: 'Paolo', email: 'paolo@example.net', interesse: 'si', opzioni: [0]
+  }).ok, true);
+  assert.equal(context.votaPropostaEvento('anna@example.it', 'evento-voto-aggiunta', { interesse: 'no', opzioni: [] }).ok, true);
+
+  posta.length = 0;
+  const aggiunta = context.aggiungiOpzionePropostaEvento('anna@example.it', 'evento-voto-aggiunta', {
+    data: '22/11/2026', ora: '09:00', luogo: 'Bar'
+  });
+  assert.equal(aggiunta.ok, true);
+  assert.equal(aggiunta.ricompilazioniRichieste, 1);
+
+  const destinatari = posta.map(messaggio => messaggio.to || messaggio.bcc);
+  assert.equal(destinatari.some(to => String(to).includes('mario@example.it')), true);
+  assert.equal(posta.some(messaggio => String(messaggio.bcc || '').includes('paolo@example.net')), true);
+  assert.equal(posta.some(messaggio => String(messaggio.bcc || '').includes('anna@example.it')), false);
+
+  const voti = JSON.parse(eventiRows[1][6]);
+  assert.equal(voti._ricompilazione['socio:anna@example.it'] !== undefined, true);
+  assert.equal(voti._ricompilazione['socio:mario@example.it'], undefined);
+
+  const pre = context.getRispostaRicompilazioneOspite({ id: 'evento-voto-aggiunta', email: 'paolo@example.net' });
+  assert.equal(pre.nome, 'Paolo');
+  assert.equal(pre.interesse, 'si');
+  assert.equal(JSON.stringify(pre.opzioni), '[0]');
+  assert.equal(context.getRispostaRicompilazioneOspite({ id: 'evento-voto-aggiunta', email: 'anna@example.it' }), null);
+
+  assert.equal(context.votaPropostaEvento('', 'evento-voto-aggiunta', {
+    nome: 'Paolo', email: 'paolo@example.net', interesse: 'si', opzioni: [0, 1]
+  }).ok, true);
+  assert.equal(context.getRispostaRicompilazioneOspite({ id: 'evento-voto-aggiunta', email: 'paolo@example.net' }), null);
+});
+
+function creaContestoConfermaInviti_() {
+  const sociSheet = dataSheet([
+    ['Nome', 'Password', 'Email'],
+    ['Mario', 'hash', 'mario@example.it']
+  ]);
+  const eventiRows = [['ID', 'CreatoIl', 'CreatoreEmail', 'Titolo', 'Descrizione', 'OpzioniJson', 'VotiJson', 'Stato', '', '']];
+  const eventiSheet = dataSheet(eventiRows);
+  eventiSheet.getRange = (row, column) => ({
+    setValue(value) {
+      while (eventiRows[row - 1].length < column) eventiRows[row - 1].push('');
+      eventiRows[row - 1][column - 1] = value;
+    }
+  });
+  const spreadsheet = {
+    getSheetByName: name => name === 'soci' ? sociSheet : name === 'ProposteEventi' ? eventiSheet : null,
+    insertSheet: () => eventiSheet
+  };
+  const creato = { calendarOptions: null };
+  const context = {
+    SpreadsheetApp: { getActiveSpreadsheet: () => spreadsheet },
+    Utilities: {
+      getUuid: () => 'evento-inviti',
+      DigestAlgorithm: { SHA_256: 'SHA_256' },
+      computeDigest: (algorithm, value) => Array.from(Buffer.from(value, 'utf8').subarray(0, 4))
+    },
+    verificaLogin: dati => dati.password === 'pw' ? 'OK_LOGIN' : 'ERR_AUTH',
+    LockService: { getScriptLock: () => ({ waitLock() { }, releaseLock() { } }) },
+    CalendarApp: {
+      getCalendarById: () => ({
+        createEvent: (title, start, end, options) => {
+          creato.calendarOptions = options;
+          return { getId: () => 'calendar-event-inviti', setGuestsCanSeeGuests() { } };
+        }
+      })
+    }
+  };
+  loadScript('Eventi.js', context);
+
+  context.creaPropostaEvento('mario@example.it', 'pw', {
+    titolo: 'Cena', descrizione: '', opzioni: [
+      { data: '21/11/2026', ora: '13:00', luogo: '' },
+      { data: '22/11/2026', ora: '18:00', luogo: '' }
+    ]
+  });
+  context.votaPropostaEvento('', 'evento-inviti', { nome: 'Paolo', email: 'paolo@example.net', interesse: 'si', opzioni: [0] });
+  context.votaPropostaEvento('', 'evento-inviti', { nome: 'Lucia', email: 'lucia@example.net', interesse: 'si', opzioni: [1] });
+  context.votaPropostaEvento('', 'evento-inviti', { nome: 'Sara', email: 'sara@example.net', interesse: 'si', opzioni: [0, 1] });
+  context.votaPropostaEvento('', 'evento-inviti', { nome: 'Giulia', email: 'giulia@example.net', interesse: 'no', opzioni: [] });
+  return { context, creato };
+}
+
+test('eventi: conferma invitando solo i Sì della data scelta', () => {
+  const { context, creato } = creaContestoConfermaInviti_();
+  const opzione = { data: '21/11/2026', ora: '13:00', luogo: '' };
+
+  assert.equal(context.confermaEventoProposto({
+    email: 'mario@example.it', password: 'pw', propostaId: 'evento-inviti', soloDataSelezionata: true,
+    opzione: { data: '23/11/2026', ora: '10:00', luogo: '' }
+  }).messaggio, 'Nessun partecipante ha risposto Sì a questa data e ora.');
+
+  const risultato = context.confermaEventoProposto({
+    email: 'mario@example.it', password: 'pw', propostaId: 'evento-inviti', soloDataSelezionata: true, opzione
+  });
+  assert.equal(risultato.ok, true);
+  assert.equal(risultato.invitati, 2);
+  assert.deepEqual(creato.calendarOptions.guests.split(','), ['paolo@example.net', 'sara@example.net']);
+});
+
+test('eventi: conferma invitando tutti i Sì anche se per altre date', () => {
+  const { context, creato } = creaContestoConfermaInviti_();
+
+  const risultato = context.confermaEventoProposto({
+    email: 'mario@example.it', password: 'pw', propostaId: 'evento-inviti', soloDataSelezionata: false,
+    opzione: { data: '21/11/2026', ora: '13:00', luogo: '' }
+  });
+  assert.equal(risultato.ok, true);
+  assert.equal(risultato.invitati, 3);
+  assert.deepEqual(creato.calendarOptions.guests.split(','), ['paolo@example.net', 'lucia@example.net', 'sara@example.net']);
 });
 
 test('eventi: il creatore modifica la proposta senza perdere voti e può annullarla', () => {
@@ -758,9 +970,11 @@ test('eventi: il creatore modifica la proposta senza perdere voti e può annulla
     getSheetByName: name => name === 'soci' ? sociSheet : name === 'ProposteEventi' ? eventiSheet : null,
     insertSheet: () => eventiSheet
   };
+  const emails = [];
   const context = {
     SpreadsheetApp: { getActiveSpreadsheet: () => spreadsheet },
     LockService: { getScriptLock: () => ({ waitLock() { }, releaseLock() { } }) },
+    MailApp: { sendEmail: message => emails.push(message) },
     verificaLogin: () => 'OK_LOGIN'
   };
   loadScript('Eventi.js', context);
@@ -776,6 +990,7 @@ test('eventi: il creatore modifica la proposta senza perdere voti e può annulla
     }
   });
   assert.equal(aggiornamento.ok, true);
+  assert.equal(aggiornamento.ricompilazioniRichieste, 1);
   assert.equal(eventiRows[1][3], 'Cena soci');
   assert.equal(eventiRows[1][4], 'Descrizione aggiornata');
   assert.deepEqual(JSON.parse(eventiRows[1][5]), [
@@ -783,16 +998,157 @@ test('eventi: il creatore modifica la proposta senza perdere voti e può annulla
     { data: '22/11/2026', ora: '19:00', luogo: '' }
   ]);
   assert.deepEqual(JSON.parse(eventiRows[1][6]).opzioni, [2, 0]);
+  assert.ok(JSON.parse(eventiRows[1][6])._ricompilazione['ospite:guest-hash']);
+  assert.equal(JSON.parse(eventiRows[1][6])._ricompilazione['socio:mario@example.it'], undefined);
+  assert.equal(emails.length, 2);
+  assert.equal(emails[0].bcc, 'ospite@example.net');
+  assert.equal(emails[1].to, 'mario@example.it');
+  assert.match(emails[1].body, /avvisato 1 persona/);
 
   const rimozioneVotata = context.modificaPropostaEvento({
     email: 'mario@example.it', password: 'pw', propostaId: 'evento-edit',
     proposta: { titolo: 'Cena soci', opzioni: [{ data: '22/11/2026', ora: '19:00' }] }
   });
-  assert.equal(rimozioneVotata.ok, false);
+  assert.equal(rimozioneVotata.ok, true);
+  assert.equal(rimozioneVotata.ricompilazioniRichieste, 1);
+  assert.deepEqual(JSON.parse(eventiRows[1][6]).opzioni, [0]);
+  assert.ok(JSON.parse(eventiRows[1][6])._votanti['socio:mario@example.it']);
 
   assert.equal(context.annullaPropostaEvento({ email: 'other@example.net', password: 'pw', propostaId: 'evento-edit' }).ok, false);
   assert.equal(context.annullaPropostaEvento({ email: 'mario@example.it', password: 'pw', propostaId: 'evento-edit' }).ok, true);
   assert.equal(eventiRows[1][7], 'ANNULLATA');
+});
+
+function creaContestoRicompilazione_(votiIniziali, emails, pushes) {
+  const sociSheet = dataSheet([
+    ['Nome', 'Password', 'Email', 'Stato Socio'],
+    ['Mario', 'hash', 'mario@example.it', 'ATTIVO'],
+    ['Anna', 'hash', 'anna@example.it', 'ATTIVO']
+  ]);
+  const eventiRows = [
+    ['ID', 'CreatoIl', 'CreatoreEmail', 'Titolo', 'Descrizione', 'OpzioniJson', 'VotiJson', 'Stato', '', ''],
+    ['evento-refill', new Date(), 'mario@example.it', 'Pizza', '', JSON.stringify([
+      { data: '20/11/2026', ora: '20:00', luogo: 'Centro' },
+      { data: '21/11/2026', ora: '20:00', luogo: '' }
+    ]), JSON.stringify(votiIniziali), 'ATTIVA']
+  ];
+  const eventiSheet = dataSheet(eventiRows);
+  eventiSheet.getRange = (row, column) => ({
+    setValue(value) {
+      while (eventiRows[row - 1].length < column) eventiRows[row - 1].push('');
+      eventiRows[row - 1][column - 1] = value;
+    }
+  });
+  const spreadsheet = {
+    getSheetByName: name => name === 'soci' ? sociSheet : name === 'ProposteEventi' ? eventiSheet : null,
+    insertSheet: () => eventiSheet
+  };
+  const context = {
+    SpreadsheetApp: { getActiveSpreadsheet: () => spreadsheet },
+    LockService: { getScriptLock: () => ({ waitLock() { }, releaseLock() { } }) },
+    Utilities: {
+      DigestAlgorithm: { SHA_256: 'SHA_256' },
+      computeDigest: (algorithm, value) => Array.from(Buffer.from(value, 'utf8').subarray(0, 4))
+    },
+    verificaLogin: () => 'OK_LOGIN',
+    MailApp: { sendEmail: message => emails.push(message) },
+    inviaNotificaPush: (titolo, testo, destinatari, vista) => pushes.push({ titolo, testo, destinatari, vista })
+  };
+  loadScript('Eventi.js', context);
+  loadScript('Auth.js', context);
+  context.verificaLogin = () => 'OK_LOGIN';
+  context.getDatiUtente = () => ({ scadenza: '' });
+  return { context, eventiRows };
+}
+
+test('eventi: solo il creatore modifica e il socio che ha votato può ricompilare la risposta', () => {
+  const emails = [];
+  const pushes = [];
+  const { context, eventiRows } = creaContestoRicompilazione_({
+    interesse: { si: 1, no: 0 },
+    opzioni: [1, 0],
+    _votanti: { 'socio:anna@example.it': { interesse: 'si', opzioni: [0], email: 'anna@example.it' } }
+  }, emails, pushes);
+  const voti = () => JSON.parse(eventiRows[1][6]);
+  const modifica = {
+    email: 'mario@example.it', password: 'pw', propostaId: 'evento-refill',
+    proposta: {
+      titolo: 'Pizza', descrizione: '', opzioni: [
+        { data: '20/11/2026', ora: '20:00', luogo: 'Nuovo locale' },
+        { data: '21/11/2026', ora: '20:00', luogo: '' }
+      ]
+    }
+  };
+
+  assert.equal(context.modificaPropostaEvento(Object.assign({}, modifica, { email: 'anna@example.it' })).ok, false);
+
+  const primo = context.modificaPropostaEvento(modifica);
+  assert.equal(primo.ok, true);
+  assert.equal(primo.ricompilazioniRichieste, 1);
+  assert.equal(emails.length, 2);
+  assert.equal(emails[1].to, 'mario@example.it');
+  assert.equal(emails[0].bcc, 'anna@example.it');
+  assert.equal(JSON.stringify(pushes[0].destinatari), JSON.stringify(['anna@example.it']));
+  assert.equal(pushes[0].vista, 'viewCalendario');
+  assert.ok(context.getNotificheUtente('anna@example.it').some(notifica => notifica.titolo === 'Ricompila il questionario evento' && notifica.viewId === 'viewCalendario'));
+  assert.equal(context.getProposteEventi('anna@example.it')[0].ricompilazioneRichiesta, true);
+
+  assert.equal(context.ricompilaVotoPropostaEvento('mario@example.it', 'evento-refill', true).ok, false);
+  const manteneVoto = context.ricompilaVotoPropostaEvento('anna@example.it', 'evento-refill', false);
+  assert.equal(manteneVoto.ok, true);
+  assert.equal(manteneVoto.ricompilato, false);
+  assert.equal(voti()._ricompilazione, undefined);
+  assert.equal(voti()._votanti['socio:anna@example.it'].interesse, 'si');
+  assert.deepEqual(voti().opzioni, [1, 0]);
+  assert.equal(context.getProposteEventi('anna@example.it')[0].ricompilazioneRichiesta, false);
+  assert.equal(context.votaPropostaEvento('anna@example.it', 'evento-refill', { interesse: 'no', opzioni: [] }).ok, false);
+
+  const secondo = context.modificaPropostaEvento(Object.assign({}, modifica, {
+    proposta: {
+      titolo: 'Pizza', descrizione: '', opzioni: [
+        { data: '20/11/2026', ora: '20:00', luogo: 'Nuovo locale' },
+        { data: '21/11/2026', ora: '21:00', luogo: '' }
+      ]
+    }
+  }));
+  assert.equal(secondo.ricompilazioniRichieste, 1);
+  const ricompila = context.ricompilaVotoPropostaEvento('anna@example.it', 'evento-refill', true);
+  assert.equal(ricompila.ok, true);
+  assert.equal(ricompila.ricompilato, true);
+  assert.equal(voti().interesse.si, 0);
+  assert.deepEqual(voti().opzioni, [0, 0]);
+  assert.equal(voti()._votanti['socio:anna@example.it'], undefined);
+
+  assert.equal(context.votaPropostaEvento('anna@example.it', 'evento-refill', { interesse: 'si', opzioni: [1] }).ok, true);
+  assert.deepEqual(voti().opzioni, [0, 1]);
+  assert.equal(context.votaPropostaEvento('anna@example.it', 'evento-refill', { interesse: 'no', opzioni: [] }).ok, false);
+});
+
+test('eventi: un ospite con richiesta di ricompilazione sostituisce il voto precedente', () => {
+  const emails = [];
+  const pushes = [];
+  const { context, eventiRows } = creaContestoRicompilazione_({ interesse: { si: 0, no: 0 }, opzioni: [0, 0], _votanti: {} }, emails, pushes);
+  const voti = () => JSON.parse(eventiRows[1][6]);
+  const risposta = opzioni => ({ nome: 'Lucia', email: 'lucia@example.net', interesse: 'si', opzioni });
+
+  assert.equal(context.votaPropostaEvento('', 'evento-refill', risposta([0])).ok, true);
+  const modifica = context.modificaPropostaEvento({
+    email: 'mario@example.it', password: 'pw', propostaId: 'evento-refill',
+    proposta: {
+      titolo: 'Pizza', descrizione: '', opzioni: [
+        { data: '20/11/2026', ora: '20:00', luogo: 'Altro locale' },
+        { data: '21/11/2026', ora: '20:00', luogo: '' }
+      ]
+    }
+  });
+  assert.equal(modifica.ricompilazioniRichieste, 1);
+  assert.equal(emails[0].bcc, 'lucia@example.net');
+
+  const nuovoVoto = context.votaPropostaEvento('', 'evento-refill', risposta([1]));
+  assert.equal(nuovoVoto.ok, true);
+  assert.equal(JSON.stringify(nuovoVoto.voti.opzioni), JSON.stringify([0, 1]));
+  assert.equal(nuovoVoto.voti.interesse.si, 1);
+  assert.equal(voti()._ricompilazione, undefined);
 });
 
 test('eventi: il dispatcher serve il link pubblico e registra il voto esterno', () => {

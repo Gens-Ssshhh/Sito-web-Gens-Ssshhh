@@ -568,8 +568,17 @@ function getNotificheUtente(email) {
     if (typeof getProposteEventi === "function") {
       var adesso = new Date();
       (getProposteEventi(email) || []).forEach(function (proposta) {
-        if (proposta.mioVoto) return;
         var titoloEvento = String(proposta.titolo || "Evento proposto");
+        if (proposta.ricompilazioneRichiesta) {
+          notifiche.push({
+            tipo: "action",
+            titolo: "Ricompila il questionario evento",
+            testo: "Date, orari o luoghi di " + titoloEvento + " sono cambiati. Vuoi ricompilare la tua risposta?",
+            viewId: "viewCalendario"
+          });
+          return;
+        }
+        if (proposta.mioVoto) return;
         var creataIl = proposta.creataIl ? new Date(proposta.creataIl) : null;
         var passate72Ore = creataIl && !isNaN(creataIl.getTime()) && adesso.getTime() - creataIl.getTime() >= 3 * 86400000;
         notifiche.push({

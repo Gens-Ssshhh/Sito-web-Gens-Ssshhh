@@ -204,11 +204,39 @@ function votantiPerOpzioneEvento_(votanti, opzioni) {
   });
 }
 
+function indirizzoVotanteEvento_(chiave, risposta) {
+  var emailChiave = chiave.indexOf('socio:') === 0 ? chiave.substring(6) : chiave;
+  return String(risposta && typeof risposta === 'object' && risposta.email ? risposta.email : emailChiave).trim().toLowerCase();
+}
+
+function votantiSiEvento_(votanti, soloDataSelezionata, indiciDataSelezionata) {
+  return Object.keys(votanti).filter(function (chiave) {
+    var risposta = votanti[chiave];
+    if (typeof risposta === 'number') {
+      if (risposta < 0 || soloDataSelezionata) return false;
+    } else if (!risposta || risposta.interesse !== 'si') {
+      return false;
+    }
+    if (soloDataSelezionata && !(risposta.opzioni || []).some(function (indice) {
+      return indiciDataSelezionata.indexOf(indice) >= 0;
+    })) return false;
+    return true;
+  });
+}
+
+function partecipantiSiEvento_(votanti) {
+  var nomiSoci = nomiSociEvento_();
+  return votantiSiEvento_(votanti, false, []).map(function (chiave) {
+    return { chiave: chiave, nome: nomeVotanteEvento_(chiave, votanti[chiave], nomiSoci) };
+  });
+}
+
 function preparaPropostaEvento_(row, email) {
   var opzioni = [];
   try { opzioni = JSON.parse(row[5] || '[]'); } catch (e) { }
   var socio = verificaSocioEvento_(email);
   var voti = leggiVotiEvento_(row[6], opzioni, socio ? email : '');
+  var creatore = String(row[2] || '').trim().toLowerCase() === String(email || '').trim().toLowerCase();
   return {
     id: String(row[0]),
     titolo: String(row[3] || ''),
@@ -217,9 +245,10 @@ function preparaPropostaEvento_(row, email) {
     creataIl: row[1] instanceof Date ? row[1].toISOString() : String(row[1] || ''),
     voti: voti.riepilogo,
     votantiPerOpzione: socio ? votantiPerOpzioneEvento_(voti.votanti, opzioni) : [],
+    partecipantiSi: creatore ? partecipantiSiEvento_(voti.votanti) : [],
     mioVoto: voti.mioVoto,
     ricompilazioneRichiesta: !!(socio && chiaveRicompilazioneSocio_(voti.ricompilazione, email)),
-    creatore: String(row[2] || '').trim().toLowerCase() === String(email || '').trim().toLowerCase()
+    creatore: creatore
   };
 }
 
@@ -625,6 +654,7 @@ function confermaEventoProposto(dati) {
     var votes = {};
     try { votes = JSON.parse(row[6] || '{}'); } catch (e) { }
     var confirmed = votes._votanti || {};
+    var esclusi = Array.isArray(dati.esclusi) ? dati.esclusi.map(String) : [];
     var soloDataSelezionata = dati.soloDataSelezionata === true;
     var indiciDataSelezionata = [];
     if (soloDataSelezionata) {
@@ -639,17 +669,9 @@ function confermaEventoProposto(dati) {
       });
     }
     var attendees = [];
-    Object.keys(confirmed).forEach(function (key) {
-      var response = confirmed[key];
-      if (typeof response === 'number') {
-        if (response < 0 || soloDataSelezionata) return;
-      } else if (!response || response.interesse !== 'si') return;
-      if (soloDataSelezionata && !(response.opzioni || []).some(function (indice) {
-        return indiciDataSelezionata.indexOf(indice) >= 0;
-      })) return;
-      var address = String(typeof response === 'number'
-        ? (key.indexOf('socio:') === 0 ? key.substring(6) : key)
-        : (response.email || (key.indexOf('socio:') === 0 ? key.substring(6) : key))).trim().toLowerCase();
+    votantiSiEvento_(confirmed, soloDataSelezionata, indiciDataSelezionata).forEach(function (key) {
+      if (esclusi.indexOf(key) >= 0) return;
+      var address = indirizzoVotanteEvento_(key, confirmed[key]);
       if (/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(address) && attendees.indexOf(address) < 0) attendees.push(address);
     });
     if (!attendees.length) {

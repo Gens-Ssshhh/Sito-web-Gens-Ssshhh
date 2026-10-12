@@ -580,6 +580,42 @@
   line-height: 1.5;
 }
 
+.event-invite-list {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+  padding: 8px 10px;
+  border: 1px solid rgba(15, 39, 68, 0.12);
+  border-radius: 8px;
+  background: #fff;
+}
+
+.event-invite-list legend {
+  padding: 0 4px;
+  color: var(--navy);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.event-invite-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  color: var(--navy);
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.event-invite-item input {
+  flex: 0 0 auto;
+  margin: 0;
+}
+
+.event-invite-item span {
+  overflow-wrap: anywhere;
+}
+
 .event-management-details,
 .event-edit-details,
 .event-preference-details {

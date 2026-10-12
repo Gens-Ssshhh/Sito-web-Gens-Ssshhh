@@ -942,6 +942,40 @@ test('eventi: conferma invitando tutti i Sì anche se per altre date', () => {
   assert.deepEqual(creato.calendarOptions.guests.split(','), ['paolo@example.net', 'lucia@example.net', 'sara@example.net']);
 });
 
+test('eventi: il creatore vede i partecipanti Sì e può escluderne alcuni dall\'invito', () => {
+  const { context, creato } = creaContestoConfermaInviti_();
+  const proposta = context.getProposteEventi('mario@example.it')[0];
+  assert.equal(JSON.stringify(proposta.partecipantiSi.map(p => p.nome).sort()), '["Lucia","Paolo","Sara"]');
+  const chiaveDi = nome => proposta.partecipantiSi.find(p => p.nome === nome).chiave;
+  const opzione = { data: '21/11/2026', ora: '13:00', luogo: '' };
+
+  assert.equal(context.confermaEventoProposto({
+    email: 'mario@example.it', password: 'pw', propostaId: 'evento-inviti', soloDataSelezionata: false,
+    esclusi: proposta.partecipantiSi.map(p => p.chiave), opzione
+  }).ok, false);
+
+  const risultato = context.confermaEventoProposto({
+    email: 'mario@example.it', password: 'pw', propostaId: 'evento-inviti', soloDataSelezionata: false,
+    esclusi: [chiaveDi('Lucia'), chiaveDi('Paolo')], opzione
+  });
+  assert.equal(risultato.ok, true);
+  assert.equal(risultato.invitati, 1);
+  assert.deepEqual(creato.calendarOptions.guests.split(','), ['sara@example.net']);
+});
+
+test('eventi: esclusione combinata con la sola data scelta', () => {
+  const { context, creato } = creaContestoConfermaInviti_();
+  const proposta = context.getProposteEventi('mario@example.it')[0];
+  const chiaveDi = nome => proposta.partecipantiSi.find(p => p.nome === nome).chiave;
+
+  const risultato = context.confermaEventoProposto({
+    email: 'mario@example.it', password: 'pw', propostaId: 'evento-inviti', soloDataSelezionata: true,
+    esclusi: [chiaveDi('Sara')], opzione: { data: '21/11/2026', ora: '13:00', luogo: '' }
+  });
+  assert.equal(risultato.ok, true);
+  assert.deepEqual(creato.calendarOptions.guests.split(','), ['paolo@example.net']);
+});
+
 test('eventi: il creatore modifica la proposta senza perdere voti e può annullarla', () => {
   const sociSheet = dataSheet([['Nome', 'Password', 'Email'], ['Mario', 'hash', 'mario@example.it']]);
   const originalVotes = {

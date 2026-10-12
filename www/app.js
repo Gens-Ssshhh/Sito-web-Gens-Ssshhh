@@ -5074,6 +5074,7 @@ function renderProposteEventi(proposte) {
             '<input type="text" data-role="final-data" inputmode="numeric" maxlength="10" value="' + escapeTestoEvento(opzioneFinale.data || '') + '" placeholder="dd/mm/aaaa" required>' +
             '<input type="text" data-role="final-ora" inputmode="numeric" maxlength="5" value="' + escapeTestoEvento(opzioneFinale.ora || '') + '" placeholder="hh:mm" required>' +
             '<input type="text" data-role="final-luogo" value="' + escapeTestoEvento(opzioneFinale.luogo || '') + '" placeholder="Luogo (facoltativo)"></div>' +
+            htmlElencoInvitatiEvento_(proposta.partecipantiSi || []) +
             '<button type="submit" class="btn-primary">Conferma e invita chi ha detto Sì</button></form></section>'
             : '';
         var toolsHtml = '<details class="event-card-menu"><summary aria-label="Altre azioni" title="Altre azioni">⋮</summary>' +
@@ -5279,13 +5280,28 @@ async function annullaPropostaEvento(propostaId) {
 
 var confermaInvitoInCorso = null;
 
+function htmlElencoInvitatiEvento_(partecipanti) {
+    if (!partecipanti.length) return '';
+    return '<fieldset class="event-invite-list"><legend>Chi invitare</legend>' +
+        partecipanti.map(function (partecipante) {
+            return '<label class="event-invite-item"><input type="checkbox" data-role="invita-partecipante" value="' +
+                escapeTestoEvento(partecipante.chiave) + '" checked><span>' + escapeTestoEvento(partecipante.nome) + '</span></label>';
+        }).join('') +
+        '</fieldset>';
+}
+
 function confermaEventoProposto(form) {
     var opzione = {
         data: form.querySelector('[data-role="final-data"]').value.trim(),
         ora: form.querySelector('[data-role="final-ora"]').value.trim(),
         luogo: form.querySelector('[data-role="final-luogo"]').value.trim()
     };
-    confermaInvitoInCorso = { form: form, opzione: opzione };
+    var caselle = Array.prototype.slice.call(form.querySelectorAll('[data-role="invita-partecipante"]'));
+    var esclusi = caselle.filter(function (casella) { return !casella.checked; }).map(function (casella) { return casella.value; });
+    if (caselle.length && esclusi.length === caselle.length) {
+        return showToast('Seleziona almeno una persona da invitare.', 'error');
+    }
+    confermaInvitoInCorso = { form: form, opzione: opzione, esclusi: esclusi };
     document.getElementById('confermaInvitoOrario').innerText = opzione.data + ' alle ' + opzione.ora;
     document.getElementById('confermaInvitoModal').classList.remove('hidden');
 }
@@ -5304,6 +5320,7 @@ async function inviaConfermaEventoProposto(soloDataSelezionata) {
         password: curPass,
         propostaId: richiesta.form.getAttribute('data-event-id'),
         opzione: richiesta.opzione,
+        esclusi: richiesta.esclusi || [],
         soloDataSelezionata: soloDataSelezionata === true
     }, true).catch(function (error) {
         showToast(error.message || 'Non è stato possibile creare l’evento.', 'error');

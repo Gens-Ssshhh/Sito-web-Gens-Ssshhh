@@ -1346,3 +1346,75 @@ test('documenti: elenca categorie e carica un file nella cartella pubblica', () 
   assert.equal(uploaded.name, 'nuovo.pdf');
   assert.equal(uploaded.description, 'Bilancio');
 });
+
+test('cariche: una modifica diretta alla colonna M notifica il socio aggiornato e il titolare attuale', () => {
+  const rows = [
+    ['Nome', 'Password', 'Email', '', 'Cognome', '', '', '', '', '', '', 'Stato Socio', 'Carica sociale'],
+    ['Giulia', '', 'giulia@example.it', '', 'Neri', '', '', '', '', '', '', 'attivo', 'Tesoriere'],
+    ['Mario', '', 'mario@example.it', '', 'Rossi', '', '', '', '', '', '', 'attivo', 'Tesoriere']
+  ];
+  const sociSheet = {
+    getName: () => 'soci',
+    getDataRange: () => ({ getValues: () => rows }),
+    getRange: () => ({ getValue: () => 'Tesoriere' })
+  };
+  const messages = [];
+  const context = {
+    MailApp: { sendEmail: message => messages.push(message) },
+    console,
+    scriviLog() { }
+  };
+  loadScript('Cariche.js', context);
+
+  context.gestisciModificaCaricaIstituzionale({
+    range: {
+      getSheet: () => sociSheet,
+      getColumn: () => 13,
+      getRow: () => 2,
+      getNumRows: () => 1,
+      getNumColumns: () => 1,
+      getValue: () => 'Tesoriere'
+    },
+    oldValue: 'Socio semplice'
+  });
+
+  assert.deepEqual(messages.map(message => message.to).sort(), ['giulia@example.it', 'mario@example.it']);
+  assert.match(messages.find(message => message.to === 'giulia@example.it').body, /Socio semplice.*Tesoriere/);
+  assert.match(messages.find(message => message.to === 'mario@example.it').body, /assegnata a Giulia Neri/);
+});
+
+test('cariche: adminUpdateSocio notifica chi assume la carica e chi la ricopre', () => {
+  const rows = [
+    ['Nome', 'Password', 'Email', '', 'Cognome', 'Telefono', '', '', '', 'Numero Tessera', '', 'Stato Socio', 'Carica sociale'],
+    ['Giulia', '', 'giulia@example.it', '', 'Neri', '', '', '', '', '2', '', 'attivo', 'Socio semplice'],
+    ['Mario', '', 'mario@example.it', '', 'Rossi', '', '', '', '', '3', '', 'attivo', 'Tesoriere'],
+    ['Admin', '', 'admin@example.it', '', 'Verdi', '', '', '', '', '1', '', 'attivo', 'Presidente']
+  ];
+  const sociSheet = {
+    getDataRange: () => ({ getValues: () => rows }),
+    getRange: (row, column) => ({
+      setValue(value) { rows[row - 1][column - 1] = value; }
+    })
+  };
+  const messages = [];
+  const context = {
+    SpreadsheetApp: { getActiveSpreadsheet: () => ({ getSheetByName: name => name === 'soci' ? sociSheet : null }) },
+    MailApp: { sendEmail: message => messages.push(message) },
+    getDatiUtente: email => email === 'admin@example.it' ? { ruolo: 'Presidente' } : null,
+    scriviLog() { }
+  };
+  loadScript('Cariche.js', context);
+  loadScript('Admin.js', context);
+
+  assert.equal(context.adminUpdateSocio({
+    adminEmail: 'admin@example.it',
+    tesseraTarget: '2',
+    email: 'giulia@example.it',
+    telefono: '',
+    stato: 'attivo',
+    ruolo: 'Tesoriere'
+  }), 'OK');
+
+  assert.deepEqual(messages.map(message => message.to).sort(), ['giulia@example.it', 'mario@example.it']);
+  assert.equal(rows[1][12], 'Tesoriere');
+});

@@ -51,13 +51,13 @@ var bilancioCacheTimestamp = 0;
 var newsRequestInFlight = null;
 
 function isRuoloAmministrativo(ruolo) {
-    var ruoloNorm = String(ruolo || "").trim().toUpperCase();
+    var ruoloNorm = String(ruolo || "").trim().toUpperCase().replace(/[\s-]/g, "");
     return ["PRESIDENTE", "VICEPRESIDENTE", "SEGRETARIO", "TESORIERE"].indexOf(ruoloNorm) >= 0;
 }
 
 function utenteCorrenteHaRuoloAdmin() {
     var utente = (window.__gensAppData && window.__gensAppData.utente) || {};
-    return isRuoloAmministrativo(utente.ruolo) || utente.isAdmin === true;
+    return isRuoloAmministrativo(utente.ruolo);
 }
 
 function controllaAggiornamentoApp() {
@@ -251,8 +251,10 @@ function toggleView(viewId) {
 }
 
 function nav(viewId, el) {
-    // Ripristino temporaneo della sezione admin: torniamo a renderla visibile
-    // senza bloccare l'accesso alla pagina mentre si lavora sul contenuto.
+    if (viewId === 'viewAdmin' && !utenteCorrenteHaRuoloAdmin()) {
+        showToast("Non hai l'autorizzazione per accedere all'amministrazione.", "error");
+        return;
+    }
 
     // 1. GESTIONE PAGINE (Nascondi tutte, mostra quella giusta)
     document.querySelectorAll('.page-section').forEach(x => {
@@ -446,8 +448,9 @@ function renderHomeView() {
     var adminInfo = document.getElementById('homeAdminInfo');
     if (adminWidget && adminInfo) {
         var admin = center.admin;
-        adminWidget.classList.toggle('hidden', !admin);
-        if (admin) {
+        var mostraAdminWidget = utenteCorrenteHaRuoloAdmin() && !!admin;
+        adminWidget.classList.toggle('hidden', !mostraAdminWidget);
+        if (mostraAdminWidget) {
             adminInfo.innerHTML = '<button type="button" class="action-center-admin-card" onclick="nav(\'viewAdmin\')"><strong>' + Number(admin.candidaturePendenti || 0) + '</strong><span>Candidature pendenti</span></button>' +
                 '<button type="button" class="action-center-admin-card" onclick="nav(\'viewAdmin\')"><strong>' + Number(admin.controfirmePendenti || 0) + '</strong><span>Controfirme in sospeso</span></button>';
         }
@@ -1036,13 +1039,11 @@ function renderStartData(data, fromCache) {
     if (walletAvatar) walletAvatar.innerText = (u.nome || "U").charAt(0).toUpperCase();
     aggiornaAvvisoScadenza(u.scadenza);
 
-    // Gestione menu Amministrazione: riportato visibile per accedere subito
-    // ai contenuti admin già presenti nella pagina.
     var adminNavItem = document.getElementById('adminNavItem');
     if (adminNavItem) {
-        adminNavItem.style.display = '';
-        adminNavItem.classList.remove('hidden');
-        if (isRuoloAmministrativo(u.ruolo) || u.isAdmin === true) {
+        var utenteAmministratore = isRuoloAmministrativo(u.ruolo);
+        adminNavItem.classList.toggle('hidden', !utenteAmministratore);
+        if (utenteAmministratore) {
             caricaGraficoOverview();
             if (document.getElementById('listaNewsAdmin')) renderNewsAdmin(data.avvisi);
         }

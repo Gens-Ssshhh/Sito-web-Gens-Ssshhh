@@ -68,6 +68,7 @@ function adminUpdateSocio(dati) {
   // 2. Cerca la riga giusta usando la tessera (Colonna J)
   for (var i = 1; i < grid.length; i++) {
     if (grid[i][9].toString() === dati.tesseraTarget.toString()) {
+      var caricaPrecedente = grid[i][12] || "";
 
       // 3. Scrive i nuovi dati
       foglioSoci.getRange(i + 1, 3).setValue(dati.email);    // Col C (Email)
@@ -77,6 +78,13 @@ function adminUpdateSocio(dati) {
       // NOVITÀ: Aggiorna la Carica Sociale nella Colonna M (13)
       if (dati.ruolo) {
         foglioSoci.getRange(i + 1, 13).setValue(dati.ruolo);
+        if (normalizzaCaricaIstituzionale_(caricaPrecedente) !== normalizzaCaricaIstituzionale_(dati.ruolo)) {
+          inviaNotificaCambioCarica_({
+            nome: grid[i][0],
+            cognome: grid[i][4],
+            email: dati.email
+          }, caricaPrecedente, dati.ruolo, grid, i);
+        }
       }
 
       scriviLog(dati.adminEmail, "ADMIN_EDIT", "Modificato socio tessera " + dati.tesseraTarget);
@@ -1260,5 +1268,4 @@ function inviaDigestSettimanale() {
 
   scriviLog(emailMittente, "DIGEST_SETTIMANALE", "Inviate " + newsRecenti.length + " news a " + destinatariBCC.length + " soci.");
 }
-
 

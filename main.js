@@ -90,7 +90,7 @@ function doPost(e) {
       return ContentService.createTextOutput(JSON.stringify({ status: "SUCCESS", data: risultatoVoto })).setMimeType(ContentService.MimeType.JSON);
     }
 
-    if (azione === "processaScadenzeAmmissioni") {
+    if (azione === "processaScadenzeAmmissioni" || azione === "configuraNotificheCaricheIstituzionali" || azione === "gestisciModificaCaricaIstituzionale") {
       return ContentService.createTextOutput(JSON.stringify({ status: "ERROR", messaggio: "Azione interna non invocabile via API." })).setMimeType(ContentService.MimeType.JSON);
     }
 

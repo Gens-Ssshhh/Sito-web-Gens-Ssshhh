@@ -5121,7 +5121,7 @@ function htmlAggiungiOpzioneEvento_() {
         '<input type="text" data-role="nuova-ora" inputmode="numeric" maxlength="5" placeholder="hh:mm" aria-label="Ora">' +
         '<input type="text" data-role="nuovo-luogo" placeholder="Luogo (facoltativo)" aria-label="Luogo">' +
         '<button type="button" class="compact-action event-add-option-submit">Aggiungi opzione</button></div>' +
-        '<p class="event-add-option-notice">Gli altri partecipanti riceveranno un invito a rispondere di nuovo.</p></details>';
+        '<p class="event-add-option-notice">Il voto di chi ha già risposto resta valido. Se vuoi, aggiorna le preferenze per includere la nuova data.</p></details>';
 }
 
 function chiudiDettaglioPropostaEvento_(dialog) {
@@ -5213,6 +5213,12 @@ function renderProposteEventi(proposte) {
                 '<div class="event-refill-actions">' +
                 '<button type="button" class="btn-secondary event-refill-no">Mantieni la mia risposta</button></div></div>' +
                 htmlFormVotoEvento_(id, opzioniHtml, miaScelta, miePreferenze.length > 0);
+        } else if (proposta.ricompilazioneFacoltativa) {
+            votoEsistente = '<div class="event-refill-banner event-refill-optional" data-event-id="' + id + '" role="status">' +
+                '<p><strong>È stata aggiunta una nuova opzione.</strong> Il tuo voto resta valido. Se vuoi includere anche questa data, aggiorna le preferenze; altrimenti puoi mantenere la risposta attuale.</p>' +
+                '<div class="event-refill-actions">' +
+                '<button type="button" class="btn-secondary event-refill-no">Mantieni il voto attuale</button></div></div>' +
+                htmlFormVotoEvento_(id, opzioniHtml, miaScelta, miePreferenze.length > 0);
         } else if (mioVoto) {
             votoEsistente = '<p class="event-vote-confirmation" role="status">Hai già risposto a questa proposta. Puoi aggiornare la risposta: le preferenze ancora disponibili sono già selezionate.</p>' +
                 htmlFormVotoEvento_(id, opzioniHtml, miaScelta, miePreferenze.length > 0);
@@ -5243,7 +5249,7 @@ function renderProposteEventi(proposte) {
                 '<strong>Opzioni data e ora</strong><div class="event-options-editor">' + opzioni.map(function (opzione, indice) {
                     return htmlRigaModificaOpzione_(opzione, indice);
                 }).join('') + '</div>' +
-                '<p class="event-edit-notice">Se cambi date, orari o luoghi, chi ha già risposto riceverà una richiesta per ricompilare la risposta.</p>' +
+                '<p class="event-edit-notice">Riceverà una richiesta di aggiornamento solo chi aveva selezionato una data, un orario o un luogo modificati o rimossi.</p>' +
                 '<button type="button" class="compact-action event-edit-add-option">+ Aggiungi opzione</button>' +
                 '<button type="submit" class="btn-primary">Salva modifiche</button></form></details></div></details>';
         }
@@ -5658,7 +5664,9 @@ async function precompilaRispostaOspite(form) {
         button.classList.toggle('is-selected', button.getAttribute('data-choice') === risposta.interesse);
     });
     form.querySelector('.event-preference-details').open = opzioniScelte.length > 0;
-    avviso.textContent = 'Date, orari o luoghi sono cambiati, oppure hai già risposto. Le tue scelte precedenti, se ancora presenti, sono selezionate: puoi modificarle o aggiungerne altre.';
+    avviso.textContent = risposta.facoltativa
+        ? 'È stata aggiunta una nuova opzione: la tua risposta resta valida. Se vuoi, puoi includerla aggiornando le preferenze.'
+        : 'Date, orari o luoghi sono cambiati, oppure hai già risposto. Le tue scelte precedenti, se ancora presenti, sono selezionate: puoi modificarle o aggiungerne altre.';
     avviso.classList.remove('hidden');
 }
 
@@ -5686,7 +5694,7 @@ async function aggiungiOpzionePubblicaEvento(form, pulsante) {
     form.querySelector('[data-role="nuova-ora"]').value = '';
     form.querySelector('[data-role="nuovo-luogo"]').value = '';
     form.querySelector('.event-add-option-details').open = false;
-    showToast('Opzione aggiunta. Seleziona di nuovo Sì o No per confermare la tua risposta.', 'success');
+    showToast('Opzione aggiunta. I voti restano validi; chi vuole può aggiornare le preferenze.', 'success');
 }
 
 async function inviaVotoPubblicoEvento(form, interesse, pulsante) {

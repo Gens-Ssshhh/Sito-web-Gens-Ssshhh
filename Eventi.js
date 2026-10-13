@@ -237,6 +237,9 @@ function preparaPropostaEvento_(row, email) {
   var socio = verificaSocioEvento_(email);
   var voti = leggiVotiEvento_(row[6], opzioni, socio ? email : '');
   var creatore = String(row[2] || '').trim().toLowerCase() === String(email || '').trim().toLowerCase();
+  var chiaveRicompilazione = socio ? chiaveRicompilazioneSocio_(voti.ricompilazione, email) : null;
+  var ricompilazioneFacoltativa = chiaveRicompilazione !== null &&
+    String(voti.ricompilazione[chiaveRicompilazione]).indexOf('FACOLTATIVA:') === 0;
   return {
     id: String(row[0]),
     titolo: String(row[3] || ''),
@@ -247,7 +250,8 @@ function preparaPropostaEvento_(row, email) {
     votantiPerOpzione: socio ? votantiPerOpzioneEvento_(voti.votanti, opzioni) : [],
     partecipantiSi: creatore ? partecipantiSiEvento_(voti.votanti) : [],
     mioVoto: voti.mioVoto,
-    ricompilazioneRichiesta: !!(socio && chiaveRicompilazioneSocio_(voti.ricompilazione, email)),
+    ricompilazioneRichiesta: !!(chiaveRicompilazione !== null && !ricompilazioneFacoltativa),
+    ricompilazioneFacoltativa: ricompilazioneFacoltativa,
     creatore: creatore
   };
 }
@@ -340,7 +344,7 @@ function modificaPropostaEvento(dati) {
     var row = values[rowIndex];
     if (String(row[2] || '').trim().toLowerCase() !== email) return { ok: false, messaggio: 'Solo il creatore può modificare questa proposta.' };
     if (String(row[7] || 'ATTIVA') !== 'ATTIVA') return { ok: false, messaggio: 'La proposta non è più modificabile.' };
-    esito = applicaModificaPropostaEvento_(sheet, rowIndex, row, email, titolo, descrizione, opzioniNuove);
+    esito = applicaModificaPropostaEvento_(sheet, rowIndex, row, email, titolo, descrizione, opzioniNuove, null, false);
   } finally {
     lock.releaseLock();
   }
@@ -366,7 +370,7 @@ function inviaConfermaModificaCreatorePropostaEvento_(emailCreatore, titolo, num
   }
 }
 
-function applicaModificaPropostaEvento_(sheet, rowIndex, row, creatore, titolo, descrizione, opzioniNuove, chiaveAutore) {
+function applicaModificaPropostaEvento_(sheet, rowIndex, row, creatore, titolo, descrizione, opzioniNuove, chiaveAutore, rispostaFacoltativaNuovaOpzione) {
   var oldOptions = [];
   try { oldOptions = JSON.parse(row[5] || '[]'); } catch (e) { }
   var oldVoti = leggiVotiEvento_(row[6], oldOptions, '');
@@ -384,11 +388,17 @@ function applicaModificaPropostaEvento_(sheet, rowIndex, row, creatore, titolo, 
   });
 
   var votanti = oldVoti.votanti;
+  var votantiConPreferenzeRimosse = {};
   Object.keys(votanti).forEach(function (key) {
     var response = votanti[key];
     if (typeof response === 'number') response = { interesse: 'si', opzioni: [response] };
     if (!response || typeof response !== 'object') return;
     var oldChoices = Array.isArray(response.opzioni) ? response.opzioni : [];
+    var preferenzaRimossa = oldChoices.some(function (oldIndex) {
+      oldIndex = Number(oldIndex);
+      return Number.isInteger(oldIndex) && oldIndex >= 0 && mapping[oldIndex] < 0;
+    });
+    if (preferenzaRimossa) votantiConPreferenzeRimosse[key] = true;
     response.opzioni = oldChoices.map(Number).filter(function (oldIndex) {
       return Number.isInteger(oldIndex) && mapping[oldIndex] >= 0;
     }).map(function (oldIndex) { return mapping[oldIndex]; });
@@ -401,6 +411,11 @@ function applicaModificaPropostaEvento_(sheet, rowIndex, row, creatore, titolo, 
     var richiestaIl = new Date().toISOString();
     Object.keys(votanti).forEach(function (chiave) {
       if (chiave === 'socio:' + creatore || chiave === creatore) return;
+      if (rispostaFacoltativaNuovaOpzione) {
+        if (ricompilazione[chiave] === undefined) ricompilazione[chiave] = 'FACOLTATIVA:' + richiestaIl;
+        return;
+      }
+      if (!votantiConPreferenzeRimosse[chiave]) return;
       ricompilazione[chiave] = richiestaIl;
       if (chiave !== chiaveAutore) contatti.push(contattoVotanteEvento_(chiave, votanti[chiave]));
     });
@@ -574,7 +589,7 @@ function aggiungiOpzionePropostaEvento(email, propostaId, opzione) {
     }
 
     indice = options.length;
-    esito = applicaModificaPropostaEvento_(sheet, rowIndex, row, creatore, titolo, String(row[4] || ''), options.concat(nuova), votante.chiave);
+    esito = applicaModificaPropostaEvento_(sheet, rowIndex, row, creatore, titolo, String(row[4] || ''), options.concat(nuova), votante.chiave, true);
   } finally {
     lock.releaseLock();
   }
@@ -593,7 +608,7 @@ function inviaAggiuntaOpzioneAlCreatorePropostaEvento_(emailCreatore, titolo, no
     MailApp.sendEmail({
       to: emailCreatore,
       subject: 'Nuova data proposta: ' + titolo,
-      body: nomeAutore + ' ha proposto una nuova data per "' + titolo + '": ' + opzione.data + ' alle ' + opzione.ora + luogo + '.\n\nGli altri votanti sono stati invitati a rispondere di nuovo.\n\nGens Ssshhh',
+      body: nomeAutore + ' ha proposto una nuova data per "' + titolo + '": ' + opzione.data + ' alle ' + opzione.ora + luogo + '.\n\nLe risposte già inviate restano valide; chi lo desidera può aggiornare le proprie preferenze dal link della proposta.\n\nGens Ssshhh',
       name: 'Gens Ssshhh'
     });
   } catch (e) {
@@ -623,7 +638,12 @@ function getRispostaRicompilazioneOspite(dati) {
   var indici = (Array.isArray(risposta.opzioni) ? risposta.opzioni : []).map(Number).filter(function (indice) {
     return Number.isInteger(indice) && indice >= 0 && indice < opzioni.length;
   });
-  return { nome: String(risposta.nome || ''), interesse: risposta.interesse === 'no' ? 'no' : 'si', opzioni: indici };
+  return {
+    nome: String(risposta.nome || ''),
+    interesse: risposta.interesse === 'no' ? 'no' : 'si',
+    opzioni: indici,
+    facoltativa: String(voti.ricompilazione[chiave]).indexOf('FACOLTATIVA:') === 0
+  };
 }
 
 function confermaEventoProposto(dati) {

@@ -37,6 +37,7 @@ const urlWebAppData = APP_CONFIG.apiUrl;
 const REQUEST_TIMEOUT_MS = 20000;
 var curEmail = "";
 var curPass = "";
+var authToken = localStorage.getItem('gens_session_token') || "";
 var curDocMode = "PUBBLICO";
 var configVoto = { mode: "", max: 1 };
 var pushNotificationsInitialized = false;
@@ -877,7 +878,7 @@ async function chiamaServer(nomeAzione, parametri = {}, propagaErrore = false, t
     try {
         const response = await fetch(urlWebAppData, {
             method: "POST",
-            body: JSON.stringify({ azione: nomeAzione, payload: parametri }),
+            body: JSON.stringify({ azione: nomeAzione, payload: parametri, token: authToken }),
             headers: { "Content-Type": "text/plain" },
             signal: controller.signal
         });
@@ -890,6 +891,10 @@ async function chiamaServer(nomeAzione, parametri = {}, propagaErrore = false, t
             return risultato.data;
         } else {
             console.error("Errore server:", risultato.messaggio);
+            if (risultato.status === "AUTH_ERROR") {
+                authToken = "";
+                localStorage.removeItem('gens_session_token');
+            }
             if (propagaErrore) throw new Error(risultato.messaggio || "Errore del server");
             return null;
         }
@@ -945,12 +950,14 @@ async function faiLogin() {
 
         const risultato = await response.json();
 
-        if (risultato.status === "SUCCESS") {
+        if (risultato.status === "SUCCESS" && risultato.token) {
             curEmail = e;
             curPass = p;
+            authToken = risultato.token;
 
             localStorage.setItem('gens_email', e);
             localStorage.setItem('gens_pass', p);
+            localStorage.setItem('gens_session_token', authToken);
 
             document.getElementById('viewLogin').classList.add('hidden');
 
@@ -959,7 +966,7 @@ async function faiLogin() {
             initApp();
 
         } else {
-            msg.innerText = risultato.messaggio;
+            msg.innerText = risultato.messaggio || "Il server non ha creato una sessione valida.";
             msg.style.color = "red";
         }
 
@@ -2003,18 +2010,17 @@ window.onload = function () {
         msg.innerText = "Accesso automatico in corso...";
         msg.style.color = "#2563eb"; // Blu corporate
 
-        // Riusa subito l'ultima sessione locale mentre il server verifica le credenziali.
-        curEmail = savedEmail;
-        curPass = savedPass;
-        document.getElementById('viewLogin').classList.add('hidden');
-        document.getElementById('appInterface').classList.remove('hidden');
-        initApp();
-
-        chiamaServer("verificaLogin", { email: savedEmail, password: savedPass, info: navigator.userAgent }).then(function (res) {
-            if (res === "OK_LOGIN") {
+        chiamaServer("login", { email: savedEmail, password: savedPass, info: navigator.userAgent }).then(function (sessione) {
+            if (sessione && sessione.token) {
+                curEmail = savedEmail;
+                curPass = savedPass;
+                authToken = sessione.token;
+                localStorage.setItem('gens_session_token', authToken);
+                document.getElementById('viewLogin').classList.add('hidden');
+                document.getElementById('appInterface').classList.remove('hidden');
+                initApp();
                 verificaConsenso();
             } else {
-                // Se la password è cambiata nel frattempo, cancella la memoria vecchia
                 eseguiLogout(true);
                 msg.innerText = "Sessione scaduta. Effettua di nuovo l'accesso.";
                 msg.style.color = "#ef4444";
@@ -2025,14 +2031,26 @@ window.onload = function () {
 
 // Funzione di Logout (Pulisce la memoria e ricarica)
 function eseguiLogout(soloPulizia) {
+    if (authToken) {
+        fetch(urlWebAppData, {
+            method: "POST",
+            body: JSON.stringify({ azione: "logout", token: authToken }),
+            headers: { "Content-Type": "text/plain" },
+            keepalive: true
+        }).catch(function (error) {
+            console.error("Impossibile revocare la sessione sul server:", error);
+        });
+    }
     if (curEmail) {
         localStorage.removeItem('gens_start_data_' + curEmail.toLowerCase());
         localStorage.removeItem('gens_profile_' + curEmail.toLowerCase());
     }
     localStorage.removeItem('gens_email');
     localStorage.removeItem('gens_pass');
+    localStorage.removeItem('gens_session_token');
     curEmail = "";
     curPass = "";
+    authToken = "";
 
     // Se non è solo una pulizia silenziosa, ricarica la pagina per azzerare tutto
     if (soloPulizia !== true) {

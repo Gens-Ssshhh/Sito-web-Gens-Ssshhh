@@ -1275,7 +1275,7 @@ test('eventi: il dispatcher serve il link pubblico e registra il voto esterno', 
 
   const rispostaEndpoint = richiesta => JSON.parse(context.doPost({ postData: { contents: JSON.stringify(richiesta) } }).getContent());
   const azionePrivata = rispostaEndpoint({ azione: 'creaAccountSocioDaAmmissione_', payload: { email: 'evil@example.net' } });
-  assert.equal(azionePrivata.status, 'ERROR');
+  assert.equal(azionePrivata.status, 'AUTH_ERROR');
   assert.equal(helperInvoked, false);
   const proposta = rispostaEndpoint({ azione: 'getPropostaEventoPubblica', payload: { id: 'evento-web' } });
   assert.equal(proposta.status, 'SUCCESS');
@@ -1286,6 +1286,83 @@ test('eventi: il dispatcher serve il link pubblico e registra il voto esterno', 
     payload: ['', 'evento-web', { nome: 'Giulia', email: 'giulia@example.net', interesse: 'si', opzioni: [0] }]
   });
   assert.equal(voto.data.ok, true);
+});
+
+test('api: crea sessioni dopo il login e vincola le azioni admin all’identità autenticata', () => {
+  const cacheValues = new Map();
+  let updatePayload = null;
+  let datiUtenteRichiesti = null;
+  let tokenCounter = 0;
+  const context = {
+    CacheService: {
+      getScriptCache: () => ({
+        get: key => cacheValues.get(key) || null,
+        put: (key, value) => cacheValues.set(key, value),
+        remove: key => cacheValues.delete(key)
+      })
+    },
+    Utilities: { getUuid: () => 'session-token-' + (++tokenCounter) },
+    ContentService: {
+      MimeType: { JSON: 'JSON' },
+      createTextOutput: content => ({ getContent: () => content, setMimeType() { return this; } })
+    },
+    verificaLogin: ({ email, password }) => ['admin@example.it', 'member@example.it'].includes(email) && password === 'pw' ? 'OK_LOGIN' : 'ERR_CREDENZIALI',
+    getDatiUtente: email => {
+      datiUtenteRichiesti = email;
+      return { email, ruolo: email === 'admin@example.it' ? 'Presidente' : 'Socio semplice' };
+    },
+    isRuoloAmministrativo: ruolo => ruolo === 'Presidente',
+    adminUpdateSocio: dati => { updatePayload = dati; return 'OK'; }
+  };
+  loadScript('main.js', context);
+
+  const rispostaEndpoint = richiesta => JSON.parse(context.doPost({ postData: { contents: JSON.stringify(richiesta) } }).getContent());
+  const senzaSessione = rispostaEndpoint({ azione: 'adminUpdateSocio', payload: { adminEmail: 'admin@example.it' } });
+  assert.equal(senzaSessione.status, 'AUTH_ERROR');
+  assert.equal(updatePayload, null);
+
+  const azioneInterna = rispostaEndpoint({ azione: 'autorizzaDriveVerbali', token: 'invalid-token' });
+  assert.equal(azioneInterna.status, 'AUTH_ERROR');
+
+  const login = rispostaEndpoint({ azione: 'login', email: 'admin@example.it', password: 'pw' });
+  assert.equal(login.status, 'SUCCESS');
+  assert.equal(login.token, 'session-token-1');
+
+  const azioneNonConsentita = rispostaEndpoint({ azione: 'autorizzaDriveVerbali', token: login.token });
+  assert.equal(azioneNonConsentita.status, 'ERROR');
+
+  const modifica = rispostaEndpoint({
+    azione: 'adminUpdateSocio',
+    token: login.token,
+    payload: { adminEmail: 'other-admin@example.it', email: 'socio@example.it' }
+  });
+  assert.equal(modifica.data, 'OK');
+  assert.equal(updatePayload.adminEmail, 'admin@example.it');
+
+  const profilo = rispostaEndpoint({ azione: 'getDatiUtente', token: login.token, payload: 'other@example.it' });
+  assert.equal(profilo.data.email, 'admin@example.it');
+  assert.equal(datiUtenteRichiesti, 'admin@example.it');
+
+  const memberLogin = rispostaEndpoint({ azione: 'login', email: 'member@example.it', password: 'pw' });
+  const forbidden = rispostaEndpoint({
+    azione: 'adminUpdateSocio',
+    token: memberLogin.token,
+    payload: { adminEmail: 'admin@example.it', email: 'victim@example.it' }
+  });
+  assert.equal(forbidden.status, 'ERROR');
+  assert.equal(updatePayload.adminEmail, 'admin@example.it');
+
+  const clientSource = fs.readFileSync(path.join(root, 'www', 'app.js'), 'utf8');
+  const clientActions = Array.from(clientSource.matchAll(/chiamaServer\(\s*['"]([^'"]+)['"]/g), match => match[1]);
+  assert.deepEqual(
+    Array.from(new Set(clientActions)).filter(action => !context.AZIONI_API_CONSENTITE.includes(action)),
+    []
+  );
+
+  const logout = rispostaEndpoint({ azione: 'logout', token: login.token });
+  assert.equal(logout.data, true);
+  const sessioneRevocata = rispostaEndpoint({ azione: 'getDatiUtente', token: login.token, payload: 'admin@example.it' });
+  assert.equal(sessioneRevocata.status, 'AUTH_ERROR');
 });
 
 test('ruoli: riconosce come amministrativi presidente, vicepresidente e segretario ma non consiglieri', () => {

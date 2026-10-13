@@ -15,6 +15,78 @@ function autorizzaDriveVerbali() {
 
 
 var SECRET_SALT = "INCULATI-BRUTTO-GAYNEU37Y";
+var SESSION_CACHE_PREFIX = "gens_session_";
+var SESSION_TTL_SECONDS = 21600;
+var AZIONI_API_CONSENTITE = [
+  "adminCambiaStatoVoto", "adminCancellaNews", "adminChiudiEGeneraRegistroFirme",
+  "adminChiudiEGeneraVerbale", "adminCreaNuovaElezioneAvanzata", "adminEliminaElezione",
+  "adminEliminaGruppoRichieste", "adminEseguiControfirma", "adminGestisciAmmissione",
+  "adminGetCandidaturePendenti", "adminGetListaElezioni", "adminGetListaPagamenti",
+  "adminGetRisultatiLive", "adminGetStatisticheFirme", "adminGetUltimiMovimentiPD",
+  "adminInviaDocumentoFirma", "adminInviaSollecito", "adminProcessaCandidatura",
+  "adminPubblicaNews", "adminRegistraRinnovo", "adminRigeneraVerbale", "adminUpdateSocio",
+  "aggiungiOpzionePropostaEvento", "aggiungiSpesaGruppo", "annullaPropostaEvento",
+  "avvallaRichiestaIscrizione", "calcolaSaldiGruppo", "cambiaPassword",
+  "checkAccettazioneRegolamento", "checkStatoVoto", "checkStatoVotoCampagna",
+  "completaResetPassword", "confermaEventoProposto", "configuraTriggerAmmissioni",
+  "creaGruppoSpese", "creaPropostaEvento", "eliminaReportArchivio", "exportBilancioExcel",
+  "finalizzaFirmaRichiesta", "generaFatturaXML", "generaTesseraPDF", "getAmmissioniAdmin",
+  "getAmmissioniInVoto", "getAnagrafeFornitoriDinamica", "getAvvisiPubblici",
+  "getCandidatureAttive", "getConsultazioniAttiveUtente", "getCostiVacanzeDashboard",
+  "getDashboardAdmin", "getDatiBilancio", "getDatiBilancioCompleto", "getDatiUtente",
+  "getElezioniPerCandidatura", "getGruppiSpese", "getListaDocumenti", "getListaFornitori",
+  "getListaSociPerSponsor", "getNomiSociAttivi", "getNotificheUtente",
+  "getPianoDeiContiDinamico", "getPropostaEventoPubblica", "getProposteEventi",
+  "getReportStorici", "getRichiesteFirmaUtente", "getRichiesteIscrizioneDaAvvallare",
+  "getRispostaRicompilazioneOspite", "getRisultatiLive", "getSociPerFattura",
+  "getStartData", "getStoricoFirmeUtente", "inviaCandidatura", "inviaLinkReset",
+  "inviaRichiestaDimissioni", "login", "logout", "modificaPropostaEvento",
+  "ottieniUrlVerbale", "proponiNuovoSocio", "registraAccettazioneRegolamento",
+  "registraMovimentoCompostoServer", "registraTokenPush", "requestSignOTP",
+  "riceviVoto", "riceviVotoCampagna", "richiediIscrizioneSocio",
+  "ricompilaVotoPropostaEvento", "rigeneraCertificatoUtente", "rimuoviTokenPush",
+  "salvaDatiUtente", "salvaFatturaRicevuta", "salvaReportArchivio", "sostieniCandidato",
+  "spostaFileUtente", "uploadFile", "utenteAggiungeOdG", "votaAmmissioneSocio",
+  "votaPropostaEvento"
+];
+
+function creaSessione_(email) {
+  var token = Utilities.getUuid();
+  CacheService.getScriptCache().put(
+    SESSION_CACHE_PREFIX + token,
+    String(email || "").trim().toLowerCase(),
+    SESSION_TTL_SECONDS
+  );
+  return token;
+}
+
+function getEmailSessione_(token) {
+  if (typeof token !== "string" || !token || token.length > 200) return "";
+  return CacheService.getScriptCache().get(SESSION_CACHE_PREFIX + token) || "";
+}
+
+function revocaSessione_(token) {
+  if (typeof token === "string" && token && token.length <= 200) {
+    CacheService.getScriptCache().remove(SESSION_CACHE_PREFIX + token);
+  }
+}
+
+function vincolaIdentitaAdmin_(valore, email) {
+  if (Array.isArray(valore)) {
+    return valore.map(function (elemento) { return vincolaIdentitaAdmin_(elemento, email); });
+  }
+  if (!valore || typeof valore !== "object") return valore;
+
+  var risultato = {};
+  Object.keys(valore).forEach(function (chiave) {
+    if (chiave === "adminEmail" || chiave === "emailAdmin") {
+      risultato[chiave] = email;
+    } else {
+      risultato[chiave] = vincolaIdentitaAdmin_(valore[chiave], email);
+    }
+  });
+  return risultato;
+}
 
 function creaHash(input) {
   // 1. Assicurati che input sia una stringa (evita errori se è null/undefined)
@@ -47,17 +119,53 @@ function doPost(e) {
     var richiesta = JSON.parse(e.postData.contents);
     var azione = richiesta.azione;
 
-    // 1. GESTIONE LOGIN (Esistente)
+    // Login and explicitly public workflows are the only anonymous entry points.
     if (azione === "login") {
-      var esito = verificaLogin({ email: richiesta.email, password: richiesta.password, info: "Accesso Mobile" });
+      var payloadLogin = richiesta.payload || {};
+      var emailLogin = richiesta.email || payloadLogin.email;
+      var passwordLogin = richiesta.password || payloadLogin.password;
+      var esito = verificaLogin({ email: emailLogin, password: passwordLogin, info: "Accesso Mobile" });
       if (esito === "OK_LOGIN") {
-        return ContentService.createTextOutput(JSON.stringify({ status: "SUCCESS", dati: getDatiUtente(richiesta.email) })).setMimeType(ContentService.MimeType.JSON);
+        var tokenSessione = creaSessione_(emailLogin);
+        var datiUtente = getDatiUtente(emailLogin);
+        return ContentService.createTextOutput(JSON.stringify({
+          status: "SUCCESS",
+          token: tokenSessione,
+          dati: datiUtente,
+          data: { token: tokenSessione, utente: datiUtente }
+        })).setMimeType(ContentService.MimeType.JSON);
       } else {
         return ContentService.createTextOutput(JSON.stringify({ status: "ERROR", messaggio: "Credenziali errate." })).setMimeType(ContentService.MimeType.JSON);
       }
     }
 
-    // 2. PROPOSTE EVENTI: i risultati pubblici contengono solo conteggi aggregati.
+    var azioniPubbliche = [
+      "completaResetPassword",
+      "getPropostaEventoPubblica",
+      "votaPropostaEvento",
+      "richiediIscrizioneSocio"
+    ];
+    var emailSessione = getEmailSessione_(richiesta.token);
+    if (azioniPubbliche.indexOf(azione) < 0 && !emailSessione) {
+      return ContentService.createTextOutput(JSON.stringify({
+        status: "AUTH_ERROR",
+        messaggio: "Sessione non valida o scaduta. Effettua di nuovo l'accesso."
+      })).setMimeType(ContentService.MimeType.JSON);
+    }
+
+    if (azione === "logout") {
+      revocaSessione_(richiesta.token);
+      return ContentService.createTextOutput(JSON.stringify({ status: "SUCCESS", data: true })).setMimeType(ContentService.MimeType.JSON);
+    }
+
+    if (AZIONI_API_CONSENTITE.indexOf(azione) < 0) {
+      return ContentService.createTextOutput(JSON.stringify({
+        status: "ERROR",
+        messaggio: "Azione non consentita tramite API."
+      })).setMimeType(ContentService.MimeType.JSON);
+    }
+
+    // Results for event proposals are public and contain aggregated counts only.
     if (azione === "getProposteEventi") {
       var payloadProposte = richiesta.payload;
       var emailProposte = Array.isArray(payloadProposte) ? payloadProposte[0] : (typeof payloadProposte === "string" ? payloadProposte : payloadProposte && payloadProposte.email);
@@ -94,13 +202,64 @@ function doPost(e) {
       return ContentService.createTextOutput(JSON.stringify({ status: "ERROR", messaggio: "Azione interna non invocabile via API." })).setMimeType(ContentService.MimeType.JSON);
     }
 
-    // 3. PONTE UNIVERSALE DINAMICO
-    // Cerca una funzione nel backend che si chiami esattamente come l'azione richiesta
+    var azioneAmministrativa = /^admin/i.test(azione || "") || /Admin$/.test(azione || "") || azione === "exportBilancioExcel" || azione === "configuraTriggerAmmissioni";
+    if (azioneAmministrativa) {
+      var utenteSessione = getDatiUtente(emailSessione);
+      if (!utenteSessione || !isRuoloAmministrativo(utenteSessione.ruolo)) {
+        return ContentService.createTextOutput(JSON.stringify({
+          status: "ERROR",
+          messaggio: "Operazione riservata agli amministratori."
+        })).setMimeType(ContentService.MimeType.JSON);
+      }
+    }
+
+    // Sensitive identity parameters must always come from the validated session.
+    if (azione === "getDatiUtente" || azione === "getDashboardAdmin") {
+      richiesta.payload = emailSessione;
+    } else if (/^admin/i.test(azione || "") && richiesta.payload && typeof richiesta.payload === "object") {
+      richiesta.payload = vincolaIdentitaAdmin_(richiesta.payload, emailSessione);
+    }
+
+    // Dynamic dispatch is retained for authenticated application actions only.
     if (typeof this[azione] === 'function' && !/_$/.test(azione)) {
       // Estrae i parametri in modo flessibile a seconda di come li invia l'app
       var param = richiesta.payload !== undefined ? richiesta.payload :
         richiesta.email !== undefined ? richiesta.email :
           richiesta.dati !== undefined ? richiesta.dati : richiesta;
+
+      var indiceIdentitaAdmin = {
+        adminGetListaPagamenti: 0,
+        adminRegistraRinnovo: 0,
+        adminGetListaElezioni: 0,
+        adminEliminaElezione: 0,
+        adminCambiaStatoVoto: 0,
+        adminGetCandidaturePendenti: 0,
+        adminProcessaCandidatura: 0,
+        adminGetRisultatiLive: 0,
+        getAmmissioniAdmin: 0,
+        adminGestisciAmmissione: 0,
+        adminGetStatisticheFirme: 0,
+        adminEseguiControfirma: 1,
+        adminChiudiEGeneraRegistroFirme: 1,
+        adminEliminaGruppoRichieste: 1,
+        adminGetUltimiMovimentiPD: 0,
+        adminChiudiEGeneraVerbale: 0,
+        adminRigeneraVerbale: 0,
+        configuraTriggerAmmissioni: 0,
+        exportBilancioExcel: 0
+      };
+      var indiceIdentita = indiceIdentitaAdmin[azione];
+      if (indiceIdentita !== undefined) {
+        if (Array.isArray(param)) {
+          param = param.slice();
+          param[indiceIdentita] = emailSessione;
+        } else if (indiceIdentita === 0) {
+          param = emailSessione;
+        }
+      } else if (/^admin/i.test(azione || "") && param && typeof param === "object") {
+        param = vincolaIdentitaAdmin_(param, emailSessione);
+        if (azione === "adminPubblicaNews" || azione === "adminCancellaNews") param.email = emailSessione;
+      }
 
       var risultato;
       if (Array.isArray(param)) {

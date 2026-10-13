@@ -576,8 +576,13 @@
                                     <div id="eventOptionsList" class="event-options-editor">
                                         <div class="event-option-row">
                                             <div class="event-option-fields">
-                                                <input type="text" data-role="data" inputmode="numeric" maxlength="10"
-                                                    placeholder="dd/mm/aaaa">
+                                                <div class="event-date-field">
+                                                    <input type="text" data-role="data" inputmode="numeric" maxlength="10"
+                                                        placeholder="dd/mm/aaaa">
+                                                    <button type="button" class="event-date-toggle" aria-label="Apri calendario"
+                                                        title="Apri calendario" onclick="apriCalendarioEvento(this)">📅</button>
+                                                    <span class="event-date-weekday"></span>
+                                                </div>
                                                 <input type="text" data-role="ora" inputmode="numeric" maxlength="5"
                                                     placeholder="hh:mm">
                                             </div>
@@ -2446,6 +2451,19 @@
                         <button id="customConfirmBtn" class="btn-primary"
                             style="padding: 10px 20px; background: #2563eb; border: none;">Conferma</button>
                     </div>
+                </div>
+            </div>
+
+            <!-- POPUP CALENDARIO PER LA SCELTA DATA DELL'EVENTO -->
+            <div id="eventCalendarPopup" class="event-calendar-popup hidden" onclick="gestisciClickCalendarioEvento(event)">
+                <div class="event-calendar-card" role="dialog" aria-modal="true" aria-label="Scegli la data">
+                    <div class="event-calendar-header">
+                        <button type="button" class="event-calendar-nav" data-cal-nav="-1" aria-label="Mese precedente">‹</button>
+                        <strong id="eventCalendarTitle"></strong>
+                        <button type="button" class="event-calendar-nav" data-cal-nav="1" aria-label="Mese successivo">›</button>
+                    </div>
+                    <div id="eventCalendarGrid" class="event-calendar-grid"></div>
+                    <button type="button" class="btn-secondary event-calendar-close" onclick="chiudiCalendarioEvento()">Chiudi</button>
                 </div>
             </div>
 

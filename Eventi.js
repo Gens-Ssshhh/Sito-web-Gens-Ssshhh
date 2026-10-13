@@ -733,13 +733,13 @@ function inviaComunicazioniPropostaEvento_(emails, titolo, propostaId, promemori
   if (!emails.length) return;
   var oggetto = promemoria ? 'Promemoria: questionario evento' : 'Nuovo questionario evento';
   var testoEvento = escapeHtmlEvento_(titolo);
-  var url = 'https://gensssshhh-collab.github.io/Sito-web-Gens-Ssshhh/index.html?evento=' + encodeURIComponent(propostaId);
+  var url = 'https://gensssshhh-collab.github.io/Sito-web-Gens-Ssshhh/index.html';
   var intro = promemoria
     ? 'Sono passati tre giorni e non risulta ancora una tua risposta.'
     : 'È stato pubblicato un nuovo questionario per un evento.';
-  var body = intro + '\n\n' + titolo + '\n\nApri il questionario: ' + url;
+  var body = intro + '\n\n' + titolo + '\n\nAccedi al portale soci per rispondere: ' + url;
   var htmlBody = '<div style="font-family:Arial,sans-serif;color:#243247;line-height:1.5">' +
-    '<p>' + intro + '</p><h2>' + testoEvento + '</h2><p><a href="' + url + '">Apri il questionario evento</a></p>' +
+    '<p>' + intro + '</p><h2>' + testoEvento + '</h2><p><a href="' + url + '">Accedi al portale soci</a></p>' +
     '<p>Gens Ssshhh</p></div>';
 
   try {
@@ -767,31 +767,19 @@ function inviaComunicazioniPropostaEvento_(emails, titolo, propostaId, promemori
   }
 }
 
-function inviaRichiestaRicompilazionePropostaEvento_(contatti, titolo, propostaId) {
-  if (!contatti || !contatti.length) return;
-  var emails = [];
-  var emailSocie = [];
-  contatti.forEach(function (contatto) {
-    if (!contatto || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(contatto.email)) return;
-    if (emails.indexOf(contatto.email) < 0) emails.push(contatto.email);
-    if (contatto.socio && emailSocie.indexOf(contatto.email) < 0) emailSocie.push(contatto.email);
-  });
-  if (!emails.length) return;
-
+function inviaEmailRicompilazioneEvento_(destinatari, titolo, intro, url, etichettaLink) {
   var oggetto = 'Ricompila il questionario evento';
   var testoEvento = escapeHtmlEvento_(titolo);
-  var url = 'https://gensssshhh-collab.github.io/Sito-web-Gens-Ssshhh/index.html?evento=' + encodeURIComponent(propostaId);
-  var intro = 'Il creatore ha modificato date, orari o luoghi di questo evento. Ti chiediamo di confermare di nuovo la tua disponibilità.';
-  var body = intro + '\n\n' + titolo + '\n\nApri il questionario: ' + url;
+  var body = intro + '\n\n' + titolo + '\n\n' + etichettaLink + ': ' + url;
   var htmlBody = '<div style="font-family:Arial,sans-serif;color:#243247;line-height:1.5">' +
-    '<p>' + intro + '</p><h2>' + testoEvento + '</h2><p><a href="' + url + '">Apri il questionario evento</a></p>' +
+    '<p>' + intro + '</p><h2>' + testoEvento + '</h2><p><a href="' + url + '">' + etichettaLink + '</a></p>' +
     '<p>Gens Ssshhh</p></div>';
 
   try {
-    for (var inizio = 0; inizio < emails.length; inizio += 40) {
+    for (var inizio = 0; inizio < destinatari.length; inizio += 40) {
       MailApp.sendEmail({
         to: 'undisclosed-recipients@gmail.com',
-        bcc: emails.slice(inizio, inizio + 40).join(','),
+        bcc: destinatari.slice(inizio, inizio + 40).join(','),
         subject: oggetto + ': ' + titolo,
         body: body,
         htmlBody: htmlBody,
@@ -801,10 +789,35 @@ function inviaRichiestaRicompilazionePropostaEvento_(contatti, titolo, propostaI
   } catch (e) {
     console.log('Invio email ricompilazione evento non completato: ' + e);
   }
+}
+
+function inviaRichiestaRicompilazionePropostaEvento_(contatti, titolo, propostaId) {
+  if (!contatti || !contatti.length) return;
+  var emailSocie = [];
+  var emailEsterni = [];
+  contatti.forEach(function (contatto) {
+    if (!contatto || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(contatto.email)) return;
+    var elenco = contatto.socio ? emailSocie : emailEsterni;
+    if (elenco.indexOf(contatto.email) < 0) elenco.push(contatto.email);
+  });
+  if (!emailSocie.length && !emailEsterni.length) return;
+
+  var introModifica = 'Il creatore ha modificato date, orari o luoghi di questo evento. Ti chiediamo di confermare di nuovo la tua disponibilità.';
+  if (emailSocie.length) {
+    inviaEmailRicompilazioneEvento_(emailSocie, titolo,
+      introModifica + ' Accedi al portale soci per aggiornare la tua risposta.',
+      'https://gensssshhh-collab.github.io/Sito-web-Gens-Ssshhh/index.html',
+      'Accedi al portale soci');
+  }
+  if (emailEsterni.length) {
+    inviaEmailRicompilazioneEvento_(emailEsterni, titolo, introModifica,
+      'https://gensssshhh-collab.github.io/Sito-web-Gens-Ssshhh/index.html?evento=' + encodeURIComponent(propostaId),
+      'Apri il questionario evento');
+  }
 
   try {
     if (emailSocie.length && typeof inviaNotificaPush === 'function') {
-      inviaNotificaPush(oggetto, 'Ricompila la tua risposta per: ' + titolo, emailSocie, 'viewCalendario');
+      inviaNotificaPush('Ricompila il questionario evento', 'Ricompila la tua risposta per: ' + titolo, emailSocie, 'viewCalendario');
     }
   } catch (e) {
     console.log('Invio push ricompilazione evento non completato: ' + e);

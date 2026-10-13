@@ -1158,6 +1158,53 @@ test('eventi: solo il creatore modifica e il socio che ha votato può ricompilar
   assert.equal(context.votaPropostaEvento('anna@example.it', 'evento-refill', { interesse: 'no', opzioni: [] }).ok, false);
 });
 
+test('eventi: la richiesta di ricompilazione porta i soci al sito e gli esterni al questionario', () => {
+  const emails = [];
+  const pushes = [];
+  const context = {
+    MailApp: { sendEmail: message => emails.push(message) },
+    inviaNotificaPush: (...args) => pushes.push(args)
+  };
+  loadScript('Eventi.js', context);
+
+  context.inviaRichiestaRicompilazionePropostaEvento_([
+    { socio: true, email: 'anna@example.it' },
+    { socio: false, email: 'ospite@example.net' },
+    { socio: true, email: 'anna@example.it' }
+  ], 'Cena soci', 'evento-x');
+
+  assert.equal(emails.length, 2);
+  const emailSocio = emails.find(message => message.bcc === 'anna@example.it');
+  const emailEsterno = emails.find(message => message.bcc === 'ospite@example.net');
+  assert.ok(emailSocio.body.includes('https://gensssshhh-collab.github.io/Sito-web-Gens-Ssshhh/index.html'));
+  assert.equal(emailSocio.body.includes('?evento='), false);
+  assert.equal(emailSocio.htmlBody.includes('?evento='), false);
+  assert.ok(emailEsterno.body.includes('https://gensssshhh-collab.github.io/Sito-web-Gens-Ssshhh/index.html?evento=evento-x'));
+  assert.ok(emailEsterno.htmlBody.includes('?evento=evento-x'));
+  assert.equal(pushes.length, 1);
+  assert.equal(JSON.stringify(pushes[0][2]), '["anna@example.it"]');
+});
+
+test('eventi: le email di nuovo questionario e promemoria portano i soci al sito, non al questionario esterno', () => {
+  const emails = [];
+  const context = {
+    MailApp: { sendEmail: message => emails.push(message) },
+    inviaNotificaPush: () => 'PUSH_INVIATA'
+  };
+  loadScript('Eventi.js', context);
+
+  context.inviaComunicazioniPropostaEvento_(['anna@example.it'], 'Cena soci', 'evento-x', false);
+  context.inviaComunicazioniPropostaEvento_(['anna@example.it'], 'Cena soci', 'evento-x', true);
+
+  assert.equal(emails.length, 2);
+  emails.forEach(message => {
+    assert.ok(message.body.includes('https://gensssshhh-collab.github.io/Sito-web-Gens-Ssshhh/index.html'));
+    assert.equal(message.body.includes('?evento='), false);
+    assert.equal(message.htmlBody.includes('?evento='), false);
+    assert.ok(message.htmlBody.includes('Accedi al portale soci'));
+  });
+});
+
 test('eventi: un ospite con richiesta di ricompilazione sostituisce il voto precedente', () => {
   const emails = [];
   const pushes = [];

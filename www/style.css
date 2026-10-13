@@ -521,6 +521,122 @@
   font-size: 13px;
 }
 
+.event-date-field {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 40px;
+  gap: 4px 6px;
+  align-items: center;
+  min-width: 0;
+}
+
+.event-date-toggle {
+  width: 40px;
+  height: 40px;
+  padding: 0;
+  border: 1px solid #cbd5e1;
+  border-radius: 7px;
+  background: #fff;
+  cursor: pointer;
+  font-size: 16px;
+}
+
+.event-date-weekday {
+  grid-column: 1 / -1;
+  padding-left: 2px;
+  color: #475569;
+  font-size: 12px;
+}
+
+.event-date-weekday:empty {
+  display: none;
+}
+
+.event-calendar-popup {
+  position: fixed;
+  inset: 0;
+  z-index: 10000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  background: rgba(15, 23, 42, 0.6);
+  backdrop-filter: blur(2px);
+}
+
+.event-calendar-card {
+  width: 100%;
+  max-width: 320px;
+  padding: 16px;
+  border-radius: 12px;
+  background: #fff;
+  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.2);
+}
+
+.event-calendar-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 12px;
+  color: #0f172a;
+}
+
+.event-calendar-nav {
+  width: 36px;
+  height: 36px;
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  background: #fff;
+  cursor: pointer;
+  font-size: 20px;
+  line-height: 1;
+}
+
+.event-calendar-grid {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 4px;
+  text-align: center;
+}
+
+.event-calendar-weekday {
+  padding: 4px 0;
+  color: #64748b;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.event-calendar-day {
+  height: 38px;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  background: transparent;
+  color: #0f172a;
+  font-size: 14px;
+  cursor: pointer;
+}
+
+.event-calendar-day:hover {
+  background: #eff6ff;
+}
+
+.event-calendar-day.is-today {
+  border-color: #2563eb;
+  font-weight: 700;
+}
+
+.event-calendar-day.is-selected,
+.event-calendar-day.is-selected:hover {
+  background: #2563eb;
+  color: #fff;
+}
+
+.event-calendar-close {
+  width: 100%;
+  margin-top: 12px;
+}
+
 .event-option-actions {
   display: flex;
   flex-wrap: wrap;

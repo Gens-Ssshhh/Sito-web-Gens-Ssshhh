@@ -853,6 +853,9 @@ document.addEventListener('input', function (event) {
     var tipo = tipoMascheraInputSmart(target);
     if (tipo === 'data') target.value = formattaDataSmart(target.value);
     if (tipo === 'ora') target.value = formattaOraSmart(target.value);
+
+    var campoData = target.closest('.event-date-field');
+    if (campoData) aggiornaGiornoSettimanaCampoEvento_(campoData);
 });
 
 function toggleSidebar() {
@@ -4921,9 +4924,110 @@ function eliminaElezioneAdmin(idElezione) {
     });
 }
 
+var GIORNI_SETTIMANA_EVENTI_ = ['Domenica', 'Lunedì', 'Martedì', 'Mercoledì', 'Giovedì', 'Venerdì', 'Sabato'];
+var MESI_EVENTI_ = ['Gennaio', 'Febbraio', 'Marzo', 'Aprile', 'Maggio', 'Giugno', 'Luglio', 'Agosto', 'Settembre', 'Ottobre', 'Novembre', 'Dicembre'];
+
+function parseDataEvento_(testo) {
+    var match = /^(\d{2})\/(\d{2})\/(\d{4})$/.exec(String(testo || '').trim());
+    if (!match) return null;
+    var giorno = Number(match[1]);
+    var mese = Number(match[2]) - 1;
+    var anno = Number(match[3]);
+    var data = new Date(anno, mese, giorno);
+    if (data.getFullYear() !== anno || data.getMonth() !== mese || data.getDate() !== giorno) return null;
+    return data;
+}
+
+function nomeGiornoSettimanaEvento_(testo) {
+    var data = parseDataEvento_(testo);
+    return data ? GIORNI_SETTIMANA_EVENTI_[data.getDay()] : '';
+}
+
+function etichettaDataEvento_(testo) {
+    var giorno = nomeGiornoSettimanaEvento_(testo);
+    return giorno ? giorno + ' ' + testo : (testo || '');
+}
+
+function htmlCampoDataEvento_(attributi, valore) {
+    return '<div class="event-date-field">' +
+        '<input type="text" ' + attributi + ' inputmode="numeric" maxlength="10" placeholder="dd/mm/aaaa" value="' + escapeTestoEvento(valore || '') + '">' +
+        '<button type="button" class="event-date-toggle" aria-label="Apri calendario" title="Apri calendario" onclick="apriCalendarioEvento(this)">📅</button>' +
+        '<span class="event-date-weekday">' + nomeGiornoSettimanaEvento_(valore) + '</span></div>';
+}
+
+function aggiornaGiornoSettimanaCampoEvento_(campo) {
+    var input = campo.querySelector('input');
+    var etichetta = campo.querySelector('.event-date-weekday');
+    if (input && etichetta) etichetta.textContent = nomeGiornoSettimanaEvento_(input.value);
+}
+
+var statoCalendarioEvento_ = { input: null, mese: null, dataSelezionata: '' };
+
+function apriCalendarioEvento(pulsante) {
+    var campo = pulsante.closest('.event-date-field');
+    var input = campo && campo.querySelector('input');
+    if (!input) return;
+    var selezionata = parseDataEvento_(input.value) || new Date();
+    statoCalendarioEvento_.input = input;
+    statoCalendarioEvento_.mese = new Date(selezionata.getFullYear(), selezionata.getMonth(), 1);
+    statoCalendarioEvento_.dataSelezionata = input.value.trim();
+    renderCalendarioEvento_();
+    document.getElementById('eventCalendarPopup').classList.remove('hidden');
+}
+
+function gestisciClickCalendarioEvento(event) {
+    if (event.target.id === 'eventCalendarPopup') return chiudiCalendarioEvento();
+    var navigazione = event.target.closest('[data-cal-nav]');
+    if (navigazione) return spostaMeseCalendarioEvento(Number(navigazione.getAttribute('data-cal-nav')));
+    var giorno = event.target.closest('[data-date]');
+    if (giorno) sceltaGiornoCalendarioEvento_(giorno.getAttribute('data-date'));
+}
+
+function chiudiCalendarioEvento() {
+    document.getElementById('eventCalendarPopup').classList.add('hidden');
+    statoCalendarioEvento_.input = null;
+}
+
+function spostaMeseCalendarioEvento(direzione) {
+    var mese = statoCalendarioEvento_.mese;
+    statoCalendarioEvento_.mese = new Date(mese.getFullYear(), mese.getMonth() + direzione, 1);
+    renderCalendarioEvento_();
+}
+
+function renderCalendarioEvento_() {
+    var anno = statoCalendarioEvento_.mese.getFullYear();
+    var mese = statoCalendarioEvento_.mese.getMonth();
+    var oggi = new Date();
+    var offset = (new Date(anno, mese, 1).getDay() + 6) % 7;
+    var giorniNelMese = new Date(anno, mese + 1, 0).getDate();
+
+    var html = ['Lu', 'Ma', 'Me', 'Gi', 'Ve', 'Sa', 'Do'].map(function (giorno) {
+        return '<span class="event-calendar-weekday">' + giorno + '</span>';
+    }).join('');
+    for (var vuoto = 0; vuoto < offset; vuoto++) html += '<span></span>';
+    for (var giorno = 1; giorno <= giorniNelMese; giorno++) {
+        var testo = String(giorno).padStart(2, '0') + '/' + String(mese + 1).padStart(2, '0') + '/' + anno;
+        var classi = 'event-calendar-day';
+        if (testo === statoCalendarioEvento_.dataSelezionata) classi += ' is-selected';
+        if (giorno === oggi.getDate() && mese === oggi.getMonth() && anno === oggi.getFullYear()) classi += ' is-today';
+        html += '<button type="button" class="' + classi + '" data-date="' + testo + '">' + giorno + '</button>';
+    }
+
+    document.getElementById('eventCalendarTitle').textContent = MESI_EVENTI_[mese] + ' ' + anno;
+    document.getElementById('eventCalendarGrid').innerHTML = html;
+}
+
+function sceltaGiornoCalendarioEvento_(testoData) {
+    var input = statoCalendarioEvento_.input;
+    if (!input) return;
+    input.value = testoData;
+    input.dispatchEvent(new Event('input', { bubbles: true }));
+    chiudiCalendarioEvento();
+}
+
 function htmlRigaOpzioneEvento_() {
     return '<div class="event-option-row"><div class="event-option-fields">' +
-        '<input type="text" data-role="data" inputmode="numeric" maxlength="10" placeholder="dd/mm/aaaa">' +
+        htmlCampoDataEvento_('data-role="data"') +
         '<input type="text" data-role="ora" inputmode="numeric" maxlength="5" placeholder="hh:mm">' +
         '</div><div class="event-option-actions">' +
         '<button type="button" data-action="luogo" onclick="toggleLuogoOpzione(this)">Aggiungi luogo</button>' +
@@ -4994,7 +5098,7 @@ function htmlFormVotoEvento_(id, opzioniHtml, miaScelta, preferenzeAperte) {
 function htmlAggiungiOpzioneEvento_() {
     return '<details class="event-add-option-details"><summary>Proponi un’altra data e ora</summary>' +
         '<div class="event-add-option-fields">' +
-        '<input type="text" data-role="nuova-data" inputmode="numeric" maxlength="10" placeholder="dd/mm/aaaa" aria-label="Data">' +
+        htmlCampoDataEvento_('data-role="nuova-data" aria-label="Data"', '') +
         '<input type="text" data-role="nuova-ora" inputmode="numeric" maxlength="5" placeholder="hh:mm" aria-label="Ora">' +
         '<input type="text" data-role="nuovo-luogo" placeholder="Luogo (facoltativo)" aria-label="Luogo">' +
         '<button type="button" class="compact-action event-add-option-submit">Aggiungi opzione</button></div>' +
@@ -5037,7 +5141,7 @@ function renderProposteEventi(proposte) {
                     ? '<ul class="event-result-voters">' + votantiOpzione.map(function (nome) { return '<li>' + escapeTestoEvento(nome) + '</li>'; }).join('') + '</ul>'
                     : '<p class="event-result-voters-empty">' + (risultato.voti > 0 ? 'Dettagli non disponibili per le preferenze espresse in precedenza.' : 'Nessuna preferenza per questa data e ora.') + '</p>';
                 return '<li class="event-result-option' + classePrincipale + '"><details><summary><span><strong>' +
-                    escapeTestoEvento(risultato.opzione.data || 'Data da definire') + ' · ' + escapeTestoEvento(risultato.opzione.ora || 'Ora da definire') +
+                    escapeTestoEvento(etichettaDataEvento_(risultato.opzione.data) || 'Data da definire') + ' · ' + escapeTestoEvento(risultato.opzione.ora || 'Ora da definire') +
                     '</strong><small>' + escapeTestoEvento(risultato.opzione.luogo || 'Luogo non specificato') + '</small></span><b>' +
                     risultato.voti + (risultato.voti === 1 ? ' preferenza' : ' preferenze') +
                     (classePrincipale ? '<em>Più votata</em>' : '') + '</b></summary>' + dettagliVotanti + '</details></li>';
@@ -5051,7 +5155,7 @@ function renderProposteEventi(proposte) {
         var opzioniHtml = opzioni.map(function (opzione, indice) {
             var selezionata = miePreferenze.indexOf(indice) !== -1 ? ' checked' : '';
             return '<label class="event-vote-option"><input type="checkbox" data-role="preferenza" value="' + indice + '"' + selezionata + '>' +
-                '<span><strong>' + escapeTestoEvento(opzione.data || 'Data da definire') + ' · ' + escapeTestoEvento(opzione.ora || 'Ora da definire') +
+                '<span><strong>' + escapeTestoEvento(etichettaDataEvento_(opzione.data) || 'Data da definire') + ' · ' + escapeTestoEvento(opzione.ora || 'Ora da definire') +
                 '</strong><small>' + escapeTestoEvento(opzione.luogo || 'Luogo non specificato') + ' · ' + Number(preferenze[indice] || 0) + ' preferenze</small></span></label>';
         }).join('');
         var votoEsistente;
@@ -5071,7 +5175,7 @@ function renderProposteEventi(proposte) {
         var confermaHtml = proposta.creatore && Number(interesse.si || 0) > 0
             ? '<section class="event-confirm-panel"><h5>Conferma evento</h5><p>Opzione più scelta, modificabile. Sarà creato un evento di 2 ore con invito a chi ha risposto Sì.</p>' +
             '<form class="event-confirm-form" data-event-id="' + id + '"><div class="event-option-fields">' +
-            '<input type="text" data-role="final-data" inputmode="numeric" maxlength="10" value="' + escapeTestoEvento(opzioneFinale.data || '') + '" placeholder="dd/mm/aaaa" required>' +
+            htmlCampoDataEvento_('data-role="final-data" required', opzioneFinale.data || '') +
             '<input type="text" data-role="final-ora" inputmode="numeric" maxlength="5" value="' + escapeTestoEvento(opzioneFinale.ora || '') + '" placeholder="hh:mm" required>' +
             '<input type="text" data-role="final-luogo" value="' + escapeTestoEvento(opzioneFinale.luogo || '') + '" placeholder="Luogo (facoltativo)"></div>' +
             htmlElencoInvitatiEvento_(proposta.partecipantiSi || []) +
@@ -5218,7 +5322,7 @@ async function rispondiRichiestaRicompilazioneEvento(propostaId, ricompila, puls
 function htmlRigaModificaOpzione_(opzione, index) {
     opzione = opzione || {};
     return '<div class="event-option-row event-edit-option-row"><div class="event-option-fields">' +
-        '<input type="text" data-role="edit-data" inputmode="numeric" maxlength="10" placeholder="dd/mm/aaaa" value="' + escapeTestoEvento(opzione.data || '') + '">' +
+        htmlCampoDataEvento_('data-role="edit-data"', opzione.data || '') +
         '<input type="text" data-role="edit-ora" inputmode="numeric" maxlength="5" placeholder="hh:mm" value="' + escapeTestoEvento(opzione.ora || '') + '">' +
         '<input type="text" data-role="edit-luogo" placeholder="Luogo (facoltativo)" value="' + escapeTestoEvento(opzione.luogo || '') + '"></div>' +
         '<div class="event-option-actions"><button type="button" class="event-edit-remove-option">Rimuovi opzione</button></div></div>';
@@ -5302,7 +5406,7 @@ function confermaEventoProposto(form) {
         return showToast('Seleziona almeno una persona da invitare.', 'error');
     }
     confermaInvitoInCorso = { form: form, opzione: opzione, esclusi: esclusi };
-    document.getElementById('confermaInvitoOrario').innerText = opzione.data + ' alle ' + opzione.ora;
+    document.getElementById('confermaInvitoOrario').innerText = etichettaDataEvento_(opzione.data) + ' alle ' + opzione.ora;
     document.getElementById('confermaInvitoModal').classList.remove('hidden');
 }
 
@@ -5441,7 +5545,7 @@ async function apriVotoPubblicoEvento(propostaId) {
 
 function htmlPreferenzaPubblicaEvento_(opzione, indice, conteggio, selezionata) {
     return '<label class="event-vote-option"><input type="checkbox" data-role="preferenza" value="' + indice + '"' + (selezionata ? ' checked' : '') + '>' +
-        '<span><strong>' + escapeTestoEvento(opzione.data || 'Data da definire') + ' · ' + escapeTestoEvento(opzione.ora || 'Ora da definire') +
+        '<span><strong>' + escapeTestoEvento(etichettaDataEvento_(opzione.data) || 'Data da definire') + ' · ' + escapeTestoEvento(opzione.ora || 'Ora da definire') +
         '</strong><small>' + escapeTestoEvento(opzione.luogo || 'Luogo non specificato') + ' · ' + conteggio + ' preferenze</small></span></label>';
 }
 

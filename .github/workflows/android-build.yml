@@ -23,9 +23,11 @@ jobs:
 
       - name: Definizione data release
         id: release
+        env:
+          TZ: 'Europe/Rome'
         run: |
-          echo "release_date=$(date -u +%Y-%m-%d)" >> "$GITHUB_OUTPUT"
-          echo "release_time=$(date -u +%H-%M)" >> "$GITHUB_OUTPUT"
+          echo "release_date=$(date +%Y-%m-%d)" >> "$GITHUB_OUTPUT"
+          echo "release_time=$(date +%H-%M)" >> "$GITHUB_OUTPUT"
 
       - name: Setup Java JDK
         uses: actions/setup-java@v4

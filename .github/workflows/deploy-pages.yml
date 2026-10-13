@@ -29,9 +29,11 @@ jobs:
         uses: actions/configure-pages@v4
 
       - name: Write release metadata
+        env:
+          TZ: 'Europe/Rome'
         run: |
-          RELEASE_DATE=$(date -u +%Y-%m-%d)
-          RELEASE_ID=$(date -u +%Y%m%d)
+          RELEASE_DATE=$(date +%Y-%m-%d)
+          RELEASE_ID=$(date +%Y%m%d)
           cat > ./www/release.json <<EOF
           {
             "app": "Gens Ssshhh",

@@ -5391,3 +5391,163 @@ textarea {
   text-decoration: underline;
   cursor: pointer;
 }
+
+#viewCalendario .calendar-list {
+  grid-template-columns: repeat(auto-fill, minmax(112px, 132px));
+  justify-content: start;
+  align-items: start;
+  gap: 14px;
+}
+
+#viewCalendario .event-proposal-tile {
+  display: flex;
+  width: 100%;
+  aspect-ratio: 1;
+  min-width: 0;
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: flex-start;
+  gap: 8px;
+  padding: 13px;
+  overflow: hidden;
+  border: 1px solid var(--tile-edge);
+  border-top: 4px solid var(--tile-accent);
+  border-radius: 16px;
+  background: linear-gradient(150deg, var(--tile-tint), #fff);
+  color: var(--navy);
+  text-align: left;
+  font: inherit;
+  box-shadow: 0 7px 18px rgba(26, 41, 69, 0.07);
+  cursor: pointer;
+  transition: transform 160ms ease, box-shadow 160ms ease;
+}
+
+#viewCalendario .event-proposal-tile:hover,
+#viewCalendario .event-proposal-tile:focus-visible {
+  transform: translateY(-3px);
+  box-shadow: 0 13px 24px rgba(26, 41, 69, 0.14);
+  outline: 3px solid rgba(45, 61, 82, 0.22);
+  outline-offset: 2px;
+}
+
+#viewCalendario .event-proposal-tile-title {
+  display: -webkit-box;
+  width: 100%;
+  overflow: hidden;
+  color: var(--navy);
+  font-size: 14px;
+  font-weight: 750;
+  line-height: 1.3;
+  overflow-wrap: anywhere;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+#viewCalendario .event-proposal-tile-description {
+  display: -webkit-box;
+  width: 100%;
+  overflow: hidden;
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+}
+
+#viewCalendario .event-proposal-color-0 { --tile-tint: #eff6ff; --tile-edge: #bfdbfe; --tile-accent: #3b82f6; }
+#viewCalendario .event-proposal-color-1 { --tile-tint: #fff7ed; --tile-edge: #fed7aa; --tile-accent: #f97316; }
+#viewCalendario .event-proposal-color-2 { --tile-tint: #ecfdf5; --tile-edge: #a7f3d0; --tile-accent: #10b981; }
+#viewCalendario .event-proposal-color-3 { --tile-tint: #fdf2f8; --tile-edge: #fbcfe8; --tile-accent: #ec4899; }
+#viewCalendario .event-proposal-color-4 { --tile-tint: #f5f3ff; --tile-edge: #ddd6fe; --tile-accent: #8b5cf6; }
+#viewCalendario .event-proposal-color-5 { --tile-tint: #fefce8; --tile-edge: #fde68a; --tile-accent: #eab308; }
+#viewCalendario .event-proposal-color-6 { --tile-tint: #ecfeff; --tile-edge: #a5f3fc; --tile-accent: #06b6d4; }
+#viewCalendario .event-proposal-color-7 { --tile-tint: #fff1f2; --tile-edge: #fecdd3; --tile-accent: #f43f5e; }
+
+#viewCalendario .event-proposal-dialog[hidden] {
+  display: none;
+}
+
+#viewCalendario .event-proposal-dialog {
+  --proposal-tint: var(--tile-tint);
+  --proposal-accent: var(--tile-accent);
+  position: fixed;
+  z-index: 10000;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  background: rgba(15, 23, 42, 0.62);
+  backdrop-filter: blur(4px);
+}
+
+#viewCalendario .event-proposal-dialog-panel {
+  position: relative;
+  width: min(900px, 100%);
+  max-height: min(900px, calc(100vh - 40px));
+  overflow: auto;
+  overscroll-behavior: contain;
+  border-radius: 20px;
+  background: #f8fafc;
+  box-shadow: 0 24px 80px rgba(15, 23, 42, 0.3);
+}
+
+#viewCalendario .event-proposal-dialog-close {
+  position: sticky;
+  z-index: 2;
+  top: 12px;
+  float: right;
+  display: grid;
+  width: 38px;
+  height: 38px;
+  margin: 12px 12px -50px 0;
+  place-items: center;
+  border: 1px solid #dbe2ea;
+  border-radius: 50%;
+  background: #fff;
+  color: var(--navy);
+  font-size: 24px;
+  line-height: 1;
+  cursor: pointer;
+  box-shadow: 0 3px 10px rgba(15, 23, 42, 0.12);
+}
+
+#viewCalendario .event-proposal-dialog-panel > .event-proposal-card {
+  --proposal-tint: var(--tile-tint);
+  --proposal-accent: var(--tile-accent);
+  min-height: 0;
+  gap: 16px;
+  padding: 28px;
+  border: 0;
+  border-top: 5px solid var(--proposal-accent);
+  border-radius: 20px;
+  background: linear-gradient(155deg, var(--proposal-tint), #fff 36%);
+  box-shadow: none;
+}
+
+@media (max-width: 600px) {
+  #viewCalendario .calendar-list {
+    grid-template-columns: repeat(auto-fill, minmax(108px, 1fr));
+    gap: 10px;
+  }
+
+  #viewCalendario .event-proposal-tile {
+    max-width: 132px;
+    padding: 11px;
+  }
+
+  #viewCalendario .event-proposal-dialog {
+    align-items: flex-end;
+    padding: 8px;
+  }
+
+  #viewCalendario .event-proposal-dialog-panel {
+    max-height: calc(100vh - 16px);
+    border-radius: 18px;
+  }
+
+  #viewCalendario .event-proposal-dialog-panel > .event-proposal-card {
+    padding: 22px 16px;
+  }
+}

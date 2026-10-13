@@ -439,7 +439,7 @@ test('iscrizioni: richiesta pubblica, due avvalli e voto programmato al decimo g
   assert.equal(context.avvallaRichiestaIscrizione('mario@example.it', seconda.richiestaId).messaggio, 'La raccolta degli avvalli è chiusa.');
 });
 
-test('eventi: condivide la proposta e rifiuta il doppio voto', () => {
+test('eventi: condivide la proposta e consente ai soci di aggiornare il voto', () => {
   const sociRows = [['Nome', 'Password', 'Email'], ['Mario', 'hash', 'mario@example.it']];
   const eventiRows = [['ID', 'CreatoIl', 'CreatoreEmail', 'Titolo', 'Descrizione', 'OpzioniJson', 'VotiJson', 'Stato']];
   const sociSheet = dataSheet(sociRows);
@@ -469,7 +469,11 @@ test('eventi: condivide la proposta e rifiuta il doppio voto', () => {
   assert.equal(proposta.ok, true);
   assert.equal(context.getProposteEventi('mario@example.it').length, 1);
   assert.equal(context.votaPropostaEvento('mario@example.it', 'evento-1', 0).ok, true);
-  assert.equal(context.votaPropostaEvento('mario@example.it', 'evento-1', 0).messaggio, 'Hai già votato questa proposta.');
+  const votoAggiornato = context.votaPropostaEvento('mario@example.it', 'evento-1', { interesse: 'no', opzioni: [] });
+  assert.equal(votoAggiornato.ok, true);
+  assert.equal(votoAggiornato.voti.interesse.si, 0);
+  assert.equal(votoAggiornato.voti.interesse.no, 1);
+  assert.equal(JSON.stringify(votoAggiornato.voti.opzioni), '[0]');
 });
 
 test('eventi: alla pubblicazione avvisa i soci attivi e installa un solo trigger reminder', () => {
@@ -976,7 +980,7 @@ test('eventi: esclusione combinata con la sola data scelta', () => {
   assert.deepEqual(creato.calendarOptions.guests.split(','), ['paolo@example.net']);
 });
 
-test('eventi: il creatore modifica la proposta senza perdere voti e può annullarla', () => {
+test('eventi: il creatore modifica la proposta mantenendo solo preferenze ancora valide e può annullarla', () => {
   const sociSheet = dataSheet([['Nome', 'Password', 'Email'], ['Mario', 'hash', 'mario@example.it']]);
   const originalVotes = {
     interesse: { si: 2, no: 0 },
@@ -1031,7 +1035,7 @@ test('eventi: il creatore modifica la proposta senza perdere voti e può annulla
     { data: '20/11/2026', ora: '18:00', luogo: 'Ristorante' },
     { data: '22/11/2026', ora: '19:00', luogo: '' }
   ]);
-  assert.deepEqual(JSON.parse(eventiRows[1][6]).opzioni, [2, 0]);
+  assert.deepEqual(JSON.parse(eventiRows[1][6]).opzioni, [0, 0]);
   assert.ok(JSON.parse(eventiRows[1][6])._ricompilazione['ospite:guest-hash']);
   assert.equal(JSON.parse(eventiRows[1][6])._ricompilazione['socio:mario@example.it'], undefined);
   assert.equal(emails.length, 2);
@@ -1063,7 +1067,7 @@ function creaContestoRicompilazione_(votiIniziali, emails, pushes) {
     ['ID', 'CreatoIl', 'CreatoreEmail', 'Titolo', 'Descrizione', 'OpzioniJson', 'VotiJson', 'Stato', '', ''],
     ['evento-refill', new Date(), 'mario@example.it', 'Pizza', '', JSON.stringify([
       { data: '20/11/2026', ora: '20:00', luogo: 'Centro' },
-      { data: '21/11/2026', ora: '20:00', luogo: '' }
+      { data: '22/11/2026', ora: '20:00', luogo: '' }
     ]), JSON.stringify(votiIniziali), 'ATTIVA']
   ];
   const eventiSheet = dataSheet(eventiRows);
@@ -1108,7 +1112,7 @@ test('eventi: solo il creatore modifica e il socio che ha votato può ricompilar
     email: 'mario@example.it', password: 'pw', propostaId: 'evento-refill',
     proposta: {
       titolo: 'Pizza', descrizione: '', opzioni: [
-        { data: '20/11/2026', ora: '20:00', luogo: 'Nuovo locale' },
+        { data: '20/11/2026', ora: '20:00', luogo: 'Centro' },
         { data: '21/11/2026', ora: '20:00', luogo: '' }
       ]
     }
@@ -1125,7 +1129,9 @@ test('eventi: solo il creatore modifica e il socio che ha votato può ricompilar
   assert.equal(JSON.stringify(pushes[0].destinatari), JSON.stringify(['anna@example.it']));
   assert.equal(pushes[0].vista, 'viewCalendario');
   assert.ok(context.getNotificheUtente('anna@example.it').some(notifica => notifica.titolo === 'Ricompila il questionario evento' && notifica.viewId === 'viewCalendario'));
-  assert.equal(context.getProposteEventi('anna@example.it')[0].ricompilazioneRichiesta, true);
+  const propostaAggiornata = context.getProposteEventi('anna@example.it')[0];
+  assert.equal(propostaAggiornata.ricompilazioneRichiesta, true);
+  assert.equal(JSON.stringify(propostaAggiornata.mioVoto.opzioni), '[0]');
 
   assert.equal(context.ricompilaVotoPropostaEvento('mario@example.it', 'evento-refill', true).ok, false);
   const manteneVoto = context.ricompilaVotoPropostaEvento('anna@example.it', 'evento-refill', false);
@@ -1135,27 +1141,33 @@ test('eventi: solo il creatore modifica e il socio che ha votato può ricompilar
   assert.equal(voti()._votanti['socio:anna@example.it'].interesse, 'si');
   assert.deepEqual(voti().opzioni, [1, 0]);
   assert.equal(context.getProposteEventi('anna@example.it')[0].ricompilazioneRichiesta, false);
-  assert.equal(context.votaPropostaEvento('anna@example.it', 'evento-refill', { interesse: 'no', opzioni: [] }).ok, false);
+  const votoModificato = context.votaPropostaEvento('anna@example.it', 'evento-refill', { interesse: 'no', opzioni: [] });
+  assert.equal(votoModificato.ok, true);
+  assert.equal(votoModificato.voti.interesse.si, 0);
+  assert.equal(votoModificato.voti.interesse.no, 1);
+  assert.equal(context.votaPropostaEvento('anna@example.it', 'evento-refill', { interesse: 'si', opzioni: [0] }).ok, true);
 
   const secondo = context.modificaPropostaEvento(Object.assign({}, modifica, {
     proposta: {
       titolo: 'Pizza', descrizione: '', opzioni: [
         { data: '20/11/2026', ora: '20:00', luogo: 'Nuovo locale' },
-        { data: '21/11/2026', ora: '21:00', luogo: '' }
+        { data: '22/11/2026', ora: '21:00', luogo: '' }
       ]
     }
   }));
   assert.equal(secondo.ricompilazioniRichieste, 1);
+  assert.equal(JSON.stringify(context.getProposteEventi('anna@example.it')[0].mioVoto.opzioni), '[]');
   const ricompila = context.ricompilaVotoPropostaEvento('anna@example.it', 'evento-refill', true);
   assert.equal(ricompila.ok, true);
   assert.equal(ricompila.ricompilato, true);
   assert.equal(voti().interesse.si, 0);
-  assert.deepEqual(voti().opzioni, [0, 0]);
+  assert.equal(voti().interesse.no, 0);
+  assert.equal(JSON.stringify(voti().opzioni), '[0,0]');
   assert.equal(voti()._votanti['socio:anna@example.it'], undefined);
 
   assert.equal(context.votaPropostaEvento('anna@example.it', 'evento-refill', { interesse: 'si', opzioni: [1] }).ok, true);
   assert.deepEqual(voti().opzioni, [0, 1]);
-  assert.equal(context.votaPropostaEvento('anna@example.it', 'evento-refill', { interesse: 'no', opzioni: [] }).ok, false);
+  assert.equal(context.votaPropostaEvento('anna@example.it', 'evento-refill', { interesse: 'no', opzioni: [] }).ok, true);
 });
 
 test('eventi: la richiesta di ricompilazione porta i soci al sito e gli esterni al questionario', () => {

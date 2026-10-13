@@ -5106,6 +5106,31 @@ function htmlAggiungiOpzioneEvento_() {
         '<p class="event-add-option-notice">Gli altri partecipanti riceveranno un invito a rispondere di nuovo.</p></details>';
 }
 
+function chiudiDettaglioPropostaEvento_(dialog) {
+    if (!dialog) return;
+    dialog.hidden = true;
+    var id = dialog.getAttribute('data-proposal-id');
+    var list = document.getElementById('eventiPropostiList');
+    if (!list) return;
+    list.querySelectorAll('.event-proposal-tile').forEach(function (tile) {
+        if (tile.getAttribute('data-proposal-id') !== id) return;
+        tile.setAttribute('aria-expanded', 'false');
+        tile.focus();
+    });
+}
+
+function apriDettaglioPropostaEvento_(tile) {
+    var list = document.getElementById('eventiPropostiList');
+    var id = tile.getAttribute('data-proposal-id');
+    var dialog = Array.prototype.find.call(list.querySelectorAll('.event-proposal-dialog'), function (element) {
+        return element.getAttribute('data-proposal-id') === id;
+    });
+    if (!dialog) return;
+    dialog.hidden = false;
+    tile.setAttribute('aria-expanded', 'true');
+    dialog.querySelector('.event-proposal-dialog-close').focus();
+}
+
 function renderProposteEventi(proposte) {
     var list = document.getElementById('eventiPropostiList');
     if (!list) return;
@@ -5116,8 +5141,12 @@ function renderProposteEventi(proposte) {
         return;
     }
 
-    list.innerHTML = proposte.map(function (proposta) {
+    list.innerHTML = proposte.map(function (proposta, cardIndex) {
         var id = escapeTestoEvento(proposta.id);
+        var dialogId = 'event-proposal-dialog-' + cardIndex;
+        var titleId = 'event-proposal-title-' + cardIndex;
+        var titolo = escapeTestoEvento(proposta.titolo || 'Evento proposto');
+        var descrizione = escapeTestoEvento(proposta.descrizione || 'Nessuna descrizione.');
         var voti = proposta.voti || {};
         var interesse = voti.interesse || { si: 0, no: 0 };
         var preferenze = Array.isArray(voti.opzioni) ? voti.opzioni : [];
@@ -5167,7 +5196,8 @@ function renderProposteEventi(proposte) {
                 '<button type="button" class="btn-secondary event-refill-no">Mantieni la mia risposta</button></div></div>' +
                 htmlFormVotoEvento_(id, opzioniHtml, miaScelta, miePreferenze.length > 0);
         } else if (mioVoto) {
-            votoEsistente = '<p class="event-vote-confirmation" role="status">Hai già risposto a questa proposta.</p>';
+            votoEsistente = '<p class="event-vote-confirmation" role="status">Hai già risposto a questa proposta. Puoi aggiornare la risposta: le preferenze ancora disponibili sono già selezionate.</p>' +
+                htmlFormVotoEvento_(id, opzioniHtml, miaScelta, miePreferenze.length > 0);
         } else {
             votoEsistente = htmlFormVotoEvento_(id, opzioniHtml, '', false);
         }
@@ -5201,13 +5231,54 @@ function renderProposteEventi(proposte) {
         }
         toolsHtml += '</div></details>';
 
-        return '<article class="event-proposal-card" data-proposal-id="' + id + '">' +
-            '<header class="event-proposal-heading"><div><h4>' + escapeTestoEvento(proposta.titolo || 'Evento proposto') + '</h4>' +
-            '<p>' + escapeTestoEvento(proposta.descrizione || '') + '</p></div><div class="event-card-actions">' + toolsHtml + '</div></header>' + editorCreatore +
+        return '<button type="button" class="event-proposal-tile event-proposal-color-' + (cardIndex % 8) + '" data-proposal-id="' + id +
+            '" aria-controls="' + dialogId + '" aria-expanded="false" aria-label="Apri proposta: ' + titolo + '">' +
+            '<span class="event-proposal-tile-title">' + titolo + '</span><span class="event-proposal-tile-description">' + descrizione + '</span></button>' +
+            '<div class="event-proposal-dialog event-proposal-color-' + (cardIndex % 8) + '" id="' + dialogId + '" data-proposal-id="' + id + '" hidden>' +
+            '<section class="event-proposal-dialog-panel" role="dialog" aria-modal="true" aria-labelledby="' + titleId + '">' +
+            '<button type="button" class="event-proposal-dialog-close" aria-label="Chiudi dettagli">×</button>' +
+            '<article class="event-proposal-card" data-proposal-id="' + id + '">' +
+            '<header class="event-proposal-heading"><div><h4 id="' + titleId + '">' + titolo + '</h4>' +
+            '<p>' + descrizione + '</p></div><div class="event-card-actions">' + toolsHtml + '</div></header>' + editorCreatore +
             '<div class="event-proposal-counts"><span class="event-count-yes"><span aria-hidden="true">👍</span><strong>' + Number(interesse.si || 0) + '</strong> interessati</span>' +
             '<span class="event-count-no"><span aria-hidden="true">👎</span><strong>' + Number(interesse.no || 0) + '</strong> non interessati</span></div>' +
-            riepilogoOpzioniHtml + votoEsistente + aggiungiOpzioneHtml + '</article>';
+            riepilogoOpzioniHtml + votoEsistente + aggiungiOpzioneHtml + '</article></section></div>';
     }).join('');
+
+    list.querySelectorAll('.event-proposal-tile').forEach(function (tile) {
+        tile.addEventListener('click', function () {
+            apriDettaglioPropostaEvento_(tile);
+        });
+    });
+    list.querySelectorAll('.event-proposal-dialog').forEach(function (dialog) {
+        dialog.addEventListener('click', function (event) {
+            if (event.target === dialog || event.target.closest('.event-proposal-dialog-close')) {
+                chiudiDettaglioPropostaEvento_(dialog);
+            }
+        });
+        dialog.addEventListener('keydown', function (event) {
+            if (event.key === 'Escape') {
+                event.preventDefault();
+                chiudiDettaglioPropostaEvento_(dialog);
+                return;
+            }
+            if (event.key !== 'Tab') return;
+            var focusable = Array.prototype.filter.call(
+                dialog.querySelectorAll('button:not([disabled]), input:not([disabled]), textarea:not([disabled]), select:not([disabled]), summary, [href], [tabindex]:not([tabindex="-1"])'),
+                function (element) { return element.getClientRects().length > 0; }
+            );
+            if (!focusable.length) return;
+            var primo = focusable[0];
+            var ultimo = focusable[focusable.length - 1];
+            if (event.shiftKey && document.activeElement === primo) {
+                event.preventDefault();
+                ultimo.focus();
+            } else if (!event.shiftKey && document.activeElement === ultimo) {
+                event.preventDefault();
+                primo.focus();
+            }
+        });
+    });
 
     list.querySelectorAll('.event-vote-form').forEach(function (form) {
         form.querySelectorAll('.event-vote-choice').forEach(function (button) {

@@ -375,7 +375,7 @@ function applicaModificaPropostaEvento_(sheet, rowIndex, row, creatore, titolo, 
 
   var mapping = oldOptions.map(function (oldOption) {
     return opzioniNuove.findIndex(function (newOption) {
-      return slotOpzioneEvento_(newOption) === slotOpzioneEvento_(oldOption);
+      return chiaveOpzioneEvento_(newOption) === chiaveOpzioneEvento_(oldOption);
     });
   });
   var counts = opzioniNuove.map(function () { return 0; });
@@ -438,7 +438,7 @@ function annullaPropostaEvento(dati) {
 
 function identitaVotanteEvento_(email, dati) {
   var socio = String(email || '').trim().toLowerCase();
-  if (verificaSocioEvento_(socio)) return { chiave: 'socio:' + socio, email: socio, nome: '' };
+  if (verificaSocioEvento_(socio)) return { chiave: 'socio:' + socio, email: socio, nome: '', socio: true };
 
   var nome = String(dati.nome || '').trim();
   var emailOspite = String(dati.email || '').trim().toLowerCase();
@@ -448,7 +448,7 @@ function identitaVotanteEvento_(email, dati) {
   if (verificaSocioEvento_(emailOspite)) {
     return { errore: 'Questa e-mail appartiene a un socio: accedi al portale per votare.' };
   }
-  return { chiave: 'ospite:' + hashEmailEvento_(emailOspite), email: emailOspite, nome: nome };
+  return { chiave: 'ospite:' + hashEmailEvento_(emailOspite), email: emailOspite, nome: nome, socio: false };
 }
 
 function votaPropostaEvento(email, propostaId, risposta) {
@@ -491,7 +491,7 @@ function votaPropostaEvento(email, propostaId, risposta) {
     var ricompilazione = votiEsistenti.ricompilazione;
     var chiaveEsistente = votanti[chiaveVotante] !== undefined ? chiaveVotante : (socio && votanti[socio] !== undefined ? socio : null);
     if (chiaveEsistente !== null) {
-      if (ricompilazione[chiaveEsistente] === undefined) {
+      if (ricompilazione[chiaveEsistente] === undefined && !identita.socio) {
         return { ok: false, messaggio: 'Hai già votato questa proposta.' };
       }
       rimuoviContributoVotoEvento_(votiEsistenti.riepilogo, votanti, chiaveEsistente);

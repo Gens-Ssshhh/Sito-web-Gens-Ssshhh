@@ -5110,7 +5110,7 @@ function htmlFormVotoEvento_(id, opzioniHtml, miaScelta, preferenzeAperte) {
         '<div class="event-vote-actions" aria-label="Rispondi alla proposta">' +
         '<button type="button" class="event-vote-choice event-vote-yes' + (miaScelta === 'si' ? ' is-selected' : '') + '" data-choice="si">👍 Sì, partecipo</button>' +
         '<button type="button" class="event-vote-choice event-vote-no' + (miaScelta === 'no' ? ' is-selected' : '') + '" data-choice="no">No</button></div>' +
-        '<details class="event-preference-details"' + (preferenzeAperte ? ' open' : '') + '><summary>Preferenze di data e ora (facoltative)</summary>' +
+        '<details class="event-preference-details"' + (preferenzeAperte ? ' open' : '') + '><summary>Date e orari preferiti</summary>' +
         '<div class="event-preferences"><strong>Quali date e orari preferisci?</strong>' + opzioniHtml + '</div></details></div>';
 }
 
@@ -5543,6 +5543,15 @@ async function votaPropostaEvento(propostaId, form, interesse, pulsante) {
     var opzioni = interesse === 'si'
         ? Array.prototype.map.call(form.querySelectorAll('[data-role="preferenza"]:checked'), function (input) { return Number(input.value); })
         : [];
+    if (interesse === 'si' && !opzioni.length) {
+        var preferenze = form.querySelector('.event-preference-details');
+        if (preferenze) {
+            preferenze.open = true;
+            preferenze.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        }
+        showToast('Per rispondere Sì, seleziona almeno una data e un orario preferiti.', 'error');
+        return;
+    }
     var pulsantiVoto = form.querySelectorAll('.event-vote-choice');
     pulsantiVoto.forEach(function (button) { button.disabled = true; });
     if (pulsante) pulsante.textContent = 'Registrazione...';
@@ -5614,25 +5623,19 @@ async function apriVotoPubblicoEvento(propostaId) {
         '<p class="public-event-description">' + escapeTestoEvento(proposta.descrizione) + '</p>' +
         '<p class="public-event-totals"><span class="event-count-yes">👍 ' + Number(interesse.si || 0) + ' interessati</span><span class="event-count-no">👎 ' + Number(interesse.no || 0) + ' non interessati</span></p>' +
         '<form id="publicEventVoteForm" data-event-id="' + escapeTestoEvento(proposta.id) + '">' +
-        '<p class="public-event-intro">Per rispondere bastano nome, e-mail e una scelta. Puoi indicare le date che preferisci, ma è facoltativo.</p>' +
-        '<label class="public-event-field">Nome e cognome<input name="nome" autocomplete="name" placeholder="Es. Mario Rossi" required maxlength="100"></label>' +
-        '<label class="public-event-field">E-mail<input name="email" type="email" autocomplete="email" placeholder="nome@esempio.it" required maxlength="254"></label>' +
+        '<label class="public-event-field">Nome e cognome<input name="nome" autocomplete="name" required maxlength="100"></label>' +
+        '<label class="public-event-field">E-mail<input name="email" type="email" autocomplete="email" required maxlength="254"></label>' +
         '<p class="public-event-notice hidden" role="status"></p>' +
-        '<section class="public-event-step"><h2>1. Ti interessa partecipare?</h2>' +
-        '<p>Scegli una risposta. Non verrà inviata finché non premi il pulsante in fondo.</p>' +
         '<div class="event-vote-actions" role="group" aria-label="Ti interessa partecipare?">' +
-        '<button type="button" class="event-vote-choice event-vote-yes" data-choice="si" aria-pressed="false">👍 Sì, partecipo</button>' +
-        '<button type="button" class="event-vote-choice event-vote-no" data-choice="no" aria-pressed="false">No, grazie</button></div>' +
-        '<p class="public-event-choice-hint" aria-live="polite">Seleziona Sì o No per continuare.</p></section>' +
-        '<section class="public-event-step"><h2>2. Scegli le date che preferisci</h2>' +
-        '<p>Facoltativo: se hai scelto Sì, puoi indicare una o più date. La risposta viene registrata anche senza selezionare date.</p>' +
-        '<details class="event-preference-details"><summary>Mostra le date e gli orari</summary>' +
-        '<div class="event-preferences">' + preferenze + '</div></details></section>' +
-        '<section class="public-event-step"><h2>3. Invia la risposta</h2>' +
-        '<p>Controlla nome, e-mail e scelta, poi invia il modulo.</p>' +
-        '<button type="submit" class="public-event-submit" disabled>Seleziona Sì o No</button></section>' +
+        '<button type="button" class="event-vote-choice event-vote-yes" data-choice="si" aria-pressed="false">👍 Partecipo</button>' +
+        '<button type="button" class="event-vote-choice event-vote-no" data-choice="no" aria-pressed="false">👎 Non partecipo</button></div>' +
+        '<p class="public-event-choice-hint" aria-live="polite"></p>' +
+        '<details class="event-preference-details public-event-dates"><summary>Date e orari</summary>' +
+        '<p class="public-event-dates-title">Scegli almeno una data</p>' +
+        '<div class="event-preferences">' + preferenze + '</div></details>' +
+        '<button type="submit" class="public-event-submit" disabled>Invia risposta</button>' +
         htmlAggiungiOpzioneEvento_() +
-        '<p class="public-event-privacy">L’e-mail serve solo a impedire voti duplicati e non viene mostrata agli altri partecipanti.</p></form>';
+        '<p class="public-event-privacy">L’e-mail non viene mostrata agli altri partecipanti.</p></form>';
 
     var form = document.getElementById('publicEventVoteForm');
     form.querySelectorAll('.event-vote-choice').forEach(function (button) {
@@ -5644,23 +5647,27 @@ async function apriVotoPubblicoEvento(propostaId) {
                 choice.classList.toggle('is-selected', selezionato);
                 choice.setAttribute('aria-pressed', selezionato ? 'true' : 'false');
             });
-            form.querySelector('.public-event-choice-hint').textContent = interesse === 'si'
-                ? 'Hai scelto Sì. Se vuoi, indica le date preferite e poi invia la risposta.'
-                : 'Hai scelto No. Puoi inviare la risposta quando sei pronto.';
-            if (interesse === 'no') {
+            form.querySelector('.public-event-choice-hint').textContent = '';
+            if (interesse === 'si') {
+                var preferenze = form.querySelector('.event-preference-details');
+                if (!form.querySelector('[data-role="preferenza"]:checked')) {
+                    preferenze.open = true;
+                    preferenze.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                }
+            } else {
                 form.querySelectorAll('[data-role="preferenza"]').forEach(function (input) { input.checked = false; });
                 form.querySelector('.event-preference-details').open = false;
             }
             var submit = form.querySelector('.public-event-submit');
             submit.disabled = false;
-            submit.textContent = interesse === 'si' ? 'Invia la mia risposta' : 'Invia la risposta';
+            submit.textContent = 'Invia risposta';
         });
     });
     form.addEventListener('submit', function (event) {
         event.preventDefault();
         var interesse = form.getAttribute('data-selected-interest');
         if (!interesse) {
-            form.querySelector('.public-event-choice-hint').textContent = 'Prima scegli Sì o No per poter inviare la risposta.';
+            form.querySelector('.public-event-choice-hint').textContent = 'Scegli se partecipi o no.';
             form.querySelector('.event-vote-actions').scrollIntoView({ behavior: 'smooth', block: 'center' });
             form.querySelector('.event-vote-yes').focus();
             return;
@@ -5704,11 +5711,11 @@ async function precompilaRispostaOspite(form) {
     form.setAttribute('data-selected-interest', risposta.interesse);
     var pulsanteInvio = form.querySelector('.public-event-submit');
     pulsanteInvio.disabled = false;
-    pulsanteInvio.textContent = risposta.interesse === 'si' ? 'Aggiorna la mia risposta' : 'Aggiorna la risposta';
-    form.querySelector('.event-preference-details').open = opzioniScelte.length > 0;
+    pulsanteInvio.textContent = 'Aggiorna risposta';
+    form.querySelector('.event-preference-details').open = risposta.interesse === 'si';
     avviso.textContent = risposta.facoltativa
-        ? 'È stata aggiunta una nuova opzione: la tua risposta resta valida. Se vuoi, puoi includerla aggiornando le preferenze.'
-        : 'Date, orari o luoghi sono cambiati, oppure hai già risposto. Le tue scelte precedenti, se ancora presenti, sono selezionate: puoi modificarle o aggiungerne altre.';
+        ? 'È stata aggiunta una nuova opzione. La tua risposta resta valida: puoi includerla se vuoi.'
+        : 'Hai già risposto. Le tue scelte ancora valide sono selezionate: puoi modificarle.';
     avviso.classList.remove('hidden');
 }
 
@@ -5744,6 +5751,16 @@ async function inviaVotoPubblicoEvento(form, interesse) {
     var opzioni = interesse === 'si'
         ? Array.prototype.map.call(form.querySelectorAll('[data-role="preferenza"]:checked'), function (input) { return Number(input.value); })
         : [];
+    if (interesse === 'si' && !opzioni.length) {
+        var preferenze = form.querySelector('.event-preference-details');
+        var avviso = form.querySelector('.public-event-notice');
+        preferenze.open = true;
+        avviso.textContent = 'Per rispondere Sì, seleziona almeno una data e un orario che preferisci.';
+        avviso.classList.remove('hidden');
+        preferenze.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        form.querySelector('[data-role="preferenza"]').focus();
+        return;
+    }
     var pulsanteInvio = form.querySelector('.public-event-submit');
     form.querySelectorAll('button').forEach(function (button) { button.disabled = true; });
     pulsanteInvio.textContent = 'Invio in corso...';

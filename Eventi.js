@@ -502,6 +502,9 @@ function votaPropostaEvento(email, propostaId, risposta) {
       return { ok: false, messaggio: 'Opzione non valida.' };
     }
     scelte = scelte.filter(function (indice, index) { return scelte.indexOf(indice) === index; });
+    if (interessato === 'si' && !scelte.length) {
+      return { ok: false, messaggio: 'Se scegli Sì, seleziona almeno una data e un orario preferiti.' };
+    }
 
     var votiEsistenti = leggiVotiEvento_(row[6], opzioni, socio);
     var votanti = votiEsistenti.votanti;

@@ -1367,15 +1367,34 @@
   line-height: 1.5;
 }
 
-.public-event-intro {
-  margin: 0;
-  padding: 12px 14px;
-  border-left: 3px solid var(--gold-strong);
-  border-radius: 8px;
-  background: #fbf8f0;
+.public-event-dates:not([open]) {
+  display: none;
+}
+
+.public-event-dates>summary {
+  display: none;
+}
+
+.public-event-dates-title {
+  margin: 0 0 8px;
   color: var(--navy);
   font-size: 13px;
-  line-height: 1.5;
+  font-weight: 700;
+}
+
+.public-event-vote-view form {
+  gap: 14px;
+}
+
+.public-event-choice-hint {
+  min-height: 0;
+  margin: 0;
+  color: #b3261e;
+  font-size: 12px;
+}
+
+.public-event-choice-hint:empty {
+  display: none;
 }
 
 .public-event-step {
@@ -1401,15 +1420,9 @@
   margin-top: 4px;
 }
 
-.public-event-choice-hint {
-  min-height: 20px;
-  color: var(--muted);
-  font-size: 12px;
-}
-
 .public-event-vote-view .public-event-submit {
   width: 100%;
-  min-height: 52px;
+  min-height: 48px;
   padding: 13px 18px;
   border: 0;
   border-radius: 10px;

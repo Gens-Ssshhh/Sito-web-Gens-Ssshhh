@@ -597,7 +597,7 @@ test('notifiche: mostra avviso evento subito e promemoria dopo 72 ore finché no
   assert.equal(dopoVoto.some(notifica => /questionario evento/i.test(notifica.titolo)), false);
 });
 
-test('eventi: registra il sì immediato anche senza preferenze data', () => {
+test('eventi: richiede almeno una preferenza per il sì ma non per il no', () => {
   const sociSheet = dataSheet([['Nome', 'Password', 'Email'], ['Mario', 'hash', 'mario@example.it']]);
   const eventiRows = [
     ['ID', 'CreatoIl', 'CreatoreEmail', 'Titolo', 'Descrizione', 'OpzioniJson', 'VotiJson', 'Stato'],
@@ -611,10 +611,18 @@ test('eventi: registra il sì immediato anche senza preferenze data', () => {
   };
   loadScript('Eventi.js', context);
 
-  const risultato = context.votaPropostaEvento('mario@example.it', 'evento-si-rapido', { interesse: 'si', opzioni: [] });
+  const senzaPreferenze = context.votaPropostaEvento('mario@example.it', 'evento-si-rapido', { interesse: 'si', opzioni: [] });
+  assert.equal(senzaPreferenze.ok, false);
+  assert.match(senzaPreferenze.messaggio, /se scegli Sì.*almeno una/i);
+
+  const risultato = context.votaPropostaEvento('mario@example.it', 'evento-si-rapido', { interesse: 'si', opzioni: [0] });
   assert.equal(risultato.ok, true);
   assert.equal(risultato.voti.interesse.si, 1);
-  assert.equal(risultato.voti.opzioni[0], 0);
+  assert.equal(risultato.voti.opzioni[0], 1);
+
+  const rispostaNo = context.votaPropostaEvento('mario@example.it', 'evento-si-rapido', { interesse: 'no', opzioni: [] });
+  assert.equal(rispostaNo.ok, true);
+  assert.equal(rispostaNo.voti.interesse.no, 1);
 });
 
 test('eventi: ospiti votano interesse e più preferenze senza esporre le email', () => {
@@ -648,6 +656,12 @@ test('eventi: ospiti votano interesse e più preferenze senza esporre le email',
       { data: '11/10/2026', ora: '10:00', luogo: 'Centro' }
     ]
   });
+
+  const senzaPreferenze = context.votaPropostaEvento('', 'evento-ospiti', {
+    nome: 'Giulia', email: 'ospite@example.net', interesse: 'si', opzioni: []
+  });
+  assert.equal(senzaPreferenze.ok, false);
+  assert.match(senzaPreferenze.messaggio, /se scegli Sì.*almeno una/i);
 
   const risposta = { nome: 'Giulia', email: 'ospite@example.net', interesse: 'si', opzioni: [0, 1] };
   assert.equal(context.votaPropostaEvento('', 'evento-ospiti', risposta).ok, true);

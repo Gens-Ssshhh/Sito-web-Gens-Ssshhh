@@ -144,6 +144,14 @@ function inizializzaNotifichePush() {
             piattaforma: 'android'
         });
     });
+    list.querySelectorAll('.event-vote-toggle').forEach(function (button) {
+        button.addEventListener('click', function () {
+            var panel = button.closest('.event-vote-entry').querySelector('.event-vote-submodule');
+            panel.hidden = !panel.hidden;
+            button.setAttribute('aria-expanded', String(!panel.hidden));
+            button.textContent = panel.hidden ? button.getAttribute('data-label') : 'Chiudi scheda voto';
+        });
+    });
 
     PushNotifications.addListener('registrationError', function (error) {
         console.error('Registrazione notifiche push fallita:', error);
@@ -5226,6 +5234,12 @@ function renderProposteEventi(proposte) {
         } else {
             votoEsistente = htmlFormVotoEvento_(id, opzioniHtml, '', false);
         }
+        var etichettaVoto = mioVoto ? 'Aggiorna voto' : 'Vota';
+        var sezioneVotoHtml = '<section class="event-vote-entry">' +
+            '<div class="event-vote-entry-heading"><div><strong>' + (mioVoto ? 'Hai già partecipato' : 'Partecipa alla scelta') +
+            '</strong><small>' + (mioVoto ? 'Puoi rivedere o aggiornare la tua risposta.' : 'Esprimi la tua preferenza per questo evento.') + '</small></div>' +
+            '<button type="button" class="btn-primary event-vote-toggle" aria-expanded="false" data-label="' + etichettaVoto + '">' + etichettaVoto + '</button></div>' +
+            '<div class="event-vote-submodule" hidden>' + votoEsistente + '</div></section>';
         var aggiungiOpzioneHtml = proposta.creatore ? '' : htmlAggiungiOpzioneEvento_();
         var opzioneFinale = opzioni[opzioneVincente] || {};
         var confermaHtml = proposta.creatore && Number(interesse.si || 0) > 0
@@ -5251,6 +5265,7 @@ function renderProposteEventi(proposte) {
                     return htmlRigaModificaOpzione_(opzione, indice);
                 }).join('') + '</div>' +
                 '<p class="event-edit-notice">Riceverà una richiesta di aggiornamento solo chi aveva selezionato una data, un orario o un luogo modificati o rimossi.</p>' +
+                '<label class="event-edit-notification"><input type="checkbox" data-role="notifica-votanti"> Avvisa i soci che hanno già votato se la modifica richiede una nuova risposta</label>' +
                 '<button type="button" class="compact-action event-edit-add-option">+ Aggiungi opzione</button>' +
                 '<button type="submit" class="btn-primary">Salva modifiche</button></form></details></div></details>';
         }
@@ -5267,7 +5282,7 @@ function renderProposteEventi(proposte) {
             '<p>' + descrizione + '</p></div><div class="event-card-actions">' + toolsHtml + '</div></header>' + editorCreatore +
             '<div class="event-proposal-counts"><span class="event-count-yes"><span aria-hidden="true">👍</span><strong>' + Number(interesse.si || 0) + '</strong> interessati</span>' +
             '<span class="event-count-no"><span aria-hidden="true">👎</span><strong>' + Number(interesse.no || 0) + '</strong> non interessati</span></div>' +
-            riepilogoOpzioniHtml + votoEsistente + aggiungiOpzioneHtml + '</article></section></div>';
+            riepilogoOpzioniHtml + sezioneVotoHtml + aggiungiOpzioneHtml + '</article></section></div>';
     }).join('');
 
     list.querySelectorAll('.event-proposal-tile').forEach(function (tile) {
@@ -5455,7 +5470,8 @@ async function salvaModifichePropostaEvento_(form) {
             titolo: form.querySelector('[data-role="edit-titolo"]').value.trim(),
             descrizione: form.querySelector('[data-role="edit-descrizione"]').value.trim(),
             opzioni: opzioni
-        }
+        },
+        inviaNotifica: !!form.querySelector('[data-role="notifica-votanti"]').checked
     }, true).catch(function (error) {
         showToast(error.message || 'Modifiche non salvate.', 'error');
         return null;
@@ -5463,7 +5479,7 @@ async function salvaModifichePropostaEvento_(form) {
     if (!result) return;
     if (!result.ok) return showToast(result.messaggio || 'Modifiche non salvate.', 'error');
     var richieste = Number(result.ricompilazioniRichieste || 0);
-    showToast(richieste ? 'Proposta aggiornata. Richieste di ricompilazione inviate: ' + richieste + '.' : 'Proposta aggiornata.', 'success');
+    showToast(richieste ? 'Proposta aggiornata. Avvisi inviati: ' + richieste + '.' : 'Proposta aggiornata.', 'success');
     caricaProposteEventi();
 }
 

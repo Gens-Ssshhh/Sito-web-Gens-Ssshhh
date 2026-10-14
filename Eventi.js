@@ -351,9 +351,12 @@ function modificaPropostaEvento(dati) {
     lock.releaseLock();
   }
 
-  inviaRichiestaRicompilazionePropostaEvento_(esito.contatti, titolo, dati.propostaId);
-  if (esito.cambiate) inviaConfermaModificaCreatorePropostaEvento_(email, titolo, esito.contatti.length);
-  return { ok: true, ricompilazioniRichieste: esito.contatti.length };
+  var contattiAvvisati = esito.contatti.filter(function (contatto) {
+    return !contatto.socio || dati.inviaNotifica === true;
+  });
+  inviaRichiestaRicompilazionePropostaEvento_(contattiAvvisati, titolo, dati.propostaId);
+  if (esito.cambiate) inviaConfermaModificaCreatorePropostaEvento_(email, titolo, contattiAvvisati.length);
+  return { ok: true, ricompilazioniRichieste: contattiAvvisati.length };
 }
 
 function inviaConfermaModificaCreatorePropostaEvento_(emailCreatore, titolo, numeroAvvisati) {

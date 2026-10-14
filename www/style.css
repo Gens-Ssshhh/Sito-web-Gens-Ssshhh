@@ -5132,6 +5132,50 @@ textarea {
   grid-template-columns: 1fr;
 }
 
+#viewCalendario .event-vote-entry {
+  padding: 16px;
+  border: 1px solid rgba(45, 61, 82, 0.12);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.82);
+}
+
+#viewCalendario .event-vote-entry-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+}
+
+#viewCalendario .event-vote-entry-heading > div {
+  display: grid;
+  gap: 4px;
+}
+
+#viewCalendario .event-vote-entry-heading strong {
+  color: var(--navy);
+}
+
+#viewCalendario .event-vote-entry-heading small {
+  color: var(--muted);
+  line-height: 1.4;
+}
+
+#viewCalendario .event-vote-toggle {
+  width: auto;
+  flex: 0 0 auto;
+  padding: 10px 18px;
+}
+
+#viewCalendario .event-vote-submodule {
+  margin-top: 16px;
+  padding-top: 16px;
+  border-top: 1px solid rgba(45, 61, 82, 0.12);
+}
+
+#viewCalendario .event-vote-submodule[hidden] {
+  display: none;
+}
+
 #viewCalendario .event-refill-banner {
   margin-top: 12px;
   padding: 14px;
@@ -5166,6 +5210,29 @@ textarea {
   color: #6b5a2e;
   font-size: 0.86rem;
   line-height: 1.4;
+}
+
+#viewCalendario .event-edit-notification {
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+  margin: 10px 0;
+  padding: 12px;
+  border: 1px solid #dbe4f0;
+  border-radius: 10px;
+  background: #f8fafc;
+  color: #334155;
+  font-size: 0.9rem;
+  line-height: 1.45;
+  cursor: pointer;
+}
+
+#viewCalendario .event-edit-notification input {
+  flex: 0 0 auto;
+  width: 17px;
+  height: 17px;
+  margin: 1px 0 0;
+  accent-color: #1e40af;
 }
 
 #viewCalendario .calendar-compose-panel {

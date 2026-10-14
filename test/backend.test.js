@@ -1177,6 +1177,35 @@ test('eventi: avvisa solo chi perde una preferenza selezionata', () => {
   assert.deepEqual(voti.opzioni, [3]);
 });
 
+test('eventi: non avvisa i soci che perdono una preferenza se la notifica non è richiesta', () => {
+  const emails = [];
+  const pushes = [];
+  const { context, eventiRows } = creaContestoRicompilazione_({
+    interesse: { si: 1, no: 0 },
+    opzioni: [1, 0],
+    _votanti: {
+      'socio:anna@example.it': { interesse: 'si', opzioni: [0], email: 'anna@example.it' }
+    }
+  }, emails, pushes);
+
+  const risultato = context.modificaPropostaEvento({
+    email: 'mario@example.it', password: 'pw', propostaId: 'evento-refill',
+    proposta: {
+      titolo: 'Pizza', descrizione: '', opzioni: [
+        { data: '20/11/2026', ora: '20:00', luogo: 'Nuovo locale' },
+        { data: '22/11/2026', ora: '20:00', luogo: '' }
+      ]
+    }
+  });
+
+  assert.equal(risultato.ok, true);
+  assert.equal(risultato.ricompilazioniRichieste, 0);
+  assert.equal(emails.length, 1);
+  assert.equal(emails[0].to, 'mario@example.it');
+  assert.equal(pushes.length, 0);
+  assert.ok(JSON.parse(eventiRows[1][6])._ricompilazione['socio:anna@example.it']);
+});
+
 test('eventi: le modifiche non disturbano chi mantiene le date selezionate', () => {
   const emails = [];
   const pushes = [];
@@ -1218,6 +1247,7 @@ test('eventi: le modifiche non disturbano chi mantiene le date selezionate', () 
   assert.equal(context.votaPropostaEvento('anna@example.it', 'evento-refill', { interesse: 'si', opzioni: [0] }).ok, true);
 
   const secondo = context.modificaPropostaEvento(Object.assign({}, modifica, {
+    inviaNotifica: true,
     proposta: {
       titolo: 'Pizza', descrizione: '', opzioni: [
         { data: '20/11/2026', ora: '20:00', luogo: 'Nuovo locale' },
@@ -1226,6 +1256,9 @@ test('eventi: le modifiche non disturbano chi mantiene le date selezionate', () 
     }
   }));
   assert.equal(secondo.ricompilazioniRichieste, 1);
+  assert.ok(emails.some(message => message.bcc === 'anna@example.it'));
+  assert.equal(pushes.length, 1);
+  assert.equal(JSON.stringify(pushes[0].destinatari), '["anna@example.it"]');
   assert.equal(JSON.stringify(context.getProposteEventi('anna@example.it')[0].mioVoto.opzioni), '[]');
   const ricompila = context.ricompilaVotoPropostaEvento('anna@example.it', 'evento-refill', true);
   assert.equal(ricompila.ok, true);

@@ -473,7 +473,7 @@ function identitaVotanteEvento_(email, dati) {
 
 function inviaCopiaRispostaOspiteEvento_(identita, titolo, propostaId, interessato, opzioniScelte, token) {
   try {
-    var url = 'https://gensssshhh-collab.github.io/Sito-web-Gens-Ssshhh/index.html?evento=' + encodeURIComponent(propostaId) + '&modifica=' + encodeURIComponent(token);
+    var url = 'https://Gens-Ssshhh.github.io/Sito-web-Gens-Ssshhh/index.html?evento=' + encodeURIComponent(propostaId) + '&modifica=' + encodeURIComponent(token);
     var etichette = (opzioniScelte || []).map(function (opzione) {
       return [opzione.data, opzione.ora, opzione.luogo].filter(Boolean).join(' · ');
     });
@@ -807,7 +807,7 @@ function inviaComunicazioniPropostaEvento_(emails, titolo, propostaId, promemori
   if (!emails.length) return;
   var oggetto = promemoria ? 'Promemoria: questionario evento' : 'Nuovo questionario evento';
   var testoEvento = escapeHtmlEvento_(titolo);
-  var url = 'https://gensssshhh-collab.github.io/Sito-web-Gens-Ssshhh/index.html';
+  var url = 'https://Gens-Ssshhh.github.io/Sito-web-Gens-Ssshhh/index.html';
   var intro = promemoria
     ? 'Sono passati tre giorni e non risulta ancora una tua risposta.'
     : 'È stato pubblicato un nuovo questionario per un evento.';
@@ -880,12 +880,12 @@ function inviaRichiestaRicompilazionePropostaEvento_(contatti, titolo, propostaI
   if (emailSocie.length) {
     inviaEmailRicompilazioneEvento_(emailSocie, titolo,
       introModifica + ' Accedi al portale soci per aggiornare la tua risposta.',
-      'https://gensssshhh-collab.github.io/Sito-web-Gens-Ssshhh/index.html',
+      'https://Gens-Ssshhh.github.io/Sito-web-Gens-Ssshhh/index.html',
       'Accedi al portale soci');
   }
   if (emailEsterni.length) {
     inviaEmailRicompilazioneEvento_(emailEsterni, titolo, introModifica,
-      'https://gensssshhh-collab.github.io/Sito-web-Gens-Ssshhh/index.html?evento=' + encodeURIComponent(propostaId),
+      'https://Gens-Ssshhh.github.io/Sito-web-Gens-Ssshhh/index.html?evento=' + encodeURIComponent(propostaId),
       'Apri il questionario evento');
   }
 

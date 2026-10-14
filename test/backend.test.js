@@ -1291,10 +1291,10 @@ test('eventi: la richiesta di ricompilazione porta i soci al sito e gli esterni 
   assert.equal(emails.length, 2);
   const emailSocio = emails.find(message => message.bcc === 'anna@example.it');
   const emailEsterno = emails.find(message => message.bcc === 'ospite@example.net');
-  assert.ok(emailSocio.body.includes('https://gensssshhh-collab.github.io/Sito-web-Gens-Ssshhh/index.html'));
+  assert.ok(emailSocio.body.includes('https://Gens-Ssshhh.github.io/Sito-web-Gens-Ssshhh/index.html'));
   assert.equal(emailSocio.body.includes('?evento='), false);
   assert.equal(emailSocio.htmlBody.includes('?evento='), false);
-  assert.ok(emailEsterno.body.includes('https://gensssshhh-collab.github.io/Sito-web-Gens-Ssshhh/index.html?evento=evento-x'));
+  assert.ok(emailEsterno.body.includes('https://Gens-Ssshhh.github.io/Sito-web-Gens-Ssshhh/index.html?evento=evento-x'));
   assert.ok(emailEsterno.htmlBody.includes('?evento=evento-x'));
   assert.equal(pushes.length, 1);
   assert.equal(JSON.stringify(pushes[0][2]), '["anna@example.it"]');
@@ -1313,7 +1313,7 @@ test('eventi: le email di nuovo questionario e promemoria portano i soci al sito
 
   assert.equal(emails.length, 2);
   emails.forEach(message => {
-    assert.ok(message.body.includes('https://gensssshhh-collab.github.io/Sito-web-Gens-Ssshhh/index.html'));
+    assert.ok(message.body.includes('https://Gens-Ssshhh.github.io/Sito-web-Gens-Ssshhh/index.html'));
     assert.equal(message.body.includes('?evento='), false);
     assert.equal(message.htmlBody.includes('?evento='), false);
     assert.ok(message.htmlBody.includes('Accedi al portale soci'));

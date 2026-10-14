@@ -45,7 +45,7 @@ var localNotificationsPlugin = null;
 var appUpdateChecked = false;
 var APP_UPDATE_CHECK_INTERVAL_MS = 7 * 24 * 60 * 60 * 1000;
 var APP_UPDATE_LAST_CHECK_KEY = 'gens_app_update_last_check';
-var APP_UPDATE_RELEASE_URL = 'https://gensssshhh-collab.github.io/Sito-web-Gens-Ssshhh/release.json';
+var APP_UPDATE_RELEASE_URL = 'https://Gens-Ssshhh.github.io/Sito-web-Gens-Ssshhh/release.json';
 var APP_UPDATE_DRIVE_FOLDER_URL = 'https://drive.google.com/drive/folders/1fnvFt3mddJ0LR-xn8_2QUGNvl_yNz';
 var bilancioRequestInFlight = null;
 var bilancioCacheTimestamp = 0;
@@ -3812,7 +3812,7 @@ async function inviaRichiestaIscrizione(event) {
 }
 
 async function condividiModuloIscrizione() {
-    var link = new URL('https://gensssshhh-collab.github.io/Sito-web-Gens-Ssshhh/index.html');
+    var link = new URL('https://Gens-Ssshhh.github.io/Sito-web-Gens-Ssshhh/index.html');
     link.searchParams.set('iscrizione', '1');
     try {
         if (navigator.share) {
@@ -5594,7 +5594,7 @@ async function votaPropostaEvento(propostaId, form, interesse, pulsante) {
 }
 
 async function condividiPropostaEvento(propostaId) {
-    var link = new URL('https://gensssshhh-collab.github.io/Sito-web-Gens-Ssshhh/index.html');
+    var link = new URL('https://Gens-Ssshhh.github.io/Sito-web-Gens-Ssshhh/index.html');
     link.searchParams.set('evento', propostaId);
     try {
         if (navigator.share) {

@@ -139,7 +139,7 @@ function inviaLinkReset(email, attivazioneIniziale) {
 
       // Il link deve aprire il frontend pubblico: il backend ricevera il token
       // tramite la chiamata POST completaResetPassword.
-      var frontendResetUrl = "https://gensssshhh-collab.github.io/Sito-web-Gens-Ssshhh/index.html";
+      var frontendResetUrl = "https://Gens-Ssshhh.github.io/Sito-web-Gens-Ssshhh/index.html";
       var link = frontendResetUrl + "?resetToken=" + encodeURIComponent(token);
 
       // 4. Invia Mail

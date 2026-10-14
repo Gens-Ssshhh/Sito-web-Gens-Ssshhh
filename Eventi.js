@@ -285,8 +285,10 @@ function creaPropostaEvento(email, password, proposta) {
   var titolo = String(proposta.titolo || '').trim();
   var descrizione = String(proposta.descrizione || '').trim();
   var opzioni = normalizzaOpzioniEvento_(proposta.opzioni);
-  if (!titolo || !opzioni.length || opzioni.some(function (opzione) { return !dataOraEvento_(opzione); })) {
-    return { ok: false, messaggio: 'Titolo e almeno una opzione di data/ora/luogo sono obbligatori.' };
+  if (!titolo) return { ok: false, messaggio: 'Inserisci il titolo dell’evento.' };
+  if (!opzioni.length) return { ok: false, messaggio: 'Inserisci almeno una data e un orario per la proposta.' };
+  if (opzioni.some(function (opzione) { return !dataOraEvento_(opzione); })) {
+    return { ok: false, messaggio: 'Una data o un orario non è valido. Usa gg/mm/aaaa e hh:mm.' };
   }
 
   var id = Utilities.getUuid();

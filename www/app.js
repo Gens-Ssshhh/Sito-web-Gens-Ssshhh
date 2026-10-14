@@ -5614,22 +5614,58 @@ async function apriVotoPubblicoEvento(propostaId) {
         '<p class="public-event-description">' + escapeTestoEvento(proposta.descrizione) + '</p>' +
         '<p class="public-event-totals"><span class="event-count-yes">👍 ' + Number(interesse.si || 0) + ' interessati</span><span class="event-count-no">👎 ' + Number(interesse.no || 0) + ' non interessati</span></p>' +
         '<form id="publicEventVoteForm" data-event-id="' + escapeTestoEvento(proposta.id) + '">' +
-        '<label class="public-event-field">Nome<input name="nome" autocomplete="name" required maxlength="100"></label>' +
-        '<label class="public-event-field">E-mail<input name="email" type="email" autocomplete="email" required maxlength="254"></label>' +
+        '<p class="public-event-intro">Per rispondere bastano nome, e-mail e una scelta. Puoi indicare le date che preferisci, ma è facoltativo.</p>' +
+        '<label class="public-event-field">Nome e cognome<input name="nome" autocomplete="name" placeholder="Es. Mario Rossi" required maxlength="100"></label>' +
+        '<label class="public-event-field">E-mail<input name="email" type="email" autocomplete="email" placeholder="nome@esempio.it" required maxlength="254"></label>' +
         '<p class="public-event-notice hidden" role="status"></p>' +
-        '<div class="event-vote-actions" aria-label="Rispondi alla proposta">' +
-        '<button type="button" class="event-vote-choice event-vote-yes" data-choice="si">👍 Sì, partecipo</button>' +
-        '<button type="button" class="event-vote-choice event-vote-no" data-choice="no">No</button></div>' +
-        '<details class="event-preference-details"><summary>Preferenze di data e ora (facoltative)</summary>' +
-        '<div class="event-preferences"><strong>Quali date e orari preferisci?</strong>' + preferenze + '</div></details>' +
+        '<section class="public-event-step"><h2>1. Ti interessa partecipare?</h2>' +
+        '<p>Scegli una risposta. Non verrà inviata finché non premi il pulsante in fondo.</p>' +
+        '<div class="event-vote-actions" role="group" aria-label="Ti interessa partecipare?">' +
+        '<button type="button" class="event-vote-choice event-vote-yes" data-choice="si" aria-pressed="false">👍 Sì, partecipo</button>' +
+        '<button type="button" class="event-vote-choice event-vote-no" data-choice="no" aria-pressed="false">No, grazie</button></div>' +
+        '<p class="public-event-choice-hint" aria-live="polite">Seleziona Sì o No per continuare.</p></section>' +
+        '<section class="public-event-step"><h2>2. Scegli le date che preferisci</h2>' +
+        '<p>Facoltativo: se hai scelto Sì, puoi indicare una o più date. La risposta viene registrata anche senza selezionare date.</p>' +
+        '<details class="event-preference-details"><summary>Mostra le date e gli orari</summary>' +
+        '<div class="event-preferences">' + preferenze + '</div></details></section>' +
+        '<section class="public-event-step"><h2>3. Invia la risposta</h2>' +
+        '<p>Controlla nome, e-mail e scelta, poi invia il modulo.</p>' +
+        '<button type="submit" class="public-event-submit" disabled>Seleziona Sì o No</button></section>' +
         htmlAggiungiOpzioneEvento_() +
         '<p class="public-event-privacy">L’e-mail serve solo a impedire voti duplicati e non viene mostrata agli altri partecipanti.</p></form>';
 
     var form = document.getElementById('publicEventVoteForm');
     form.querySelectorAll('.event-vote-choice').forEach(function (button) {
         button.addEventListener('click', function () {
-            inviaVotoPubblicoEvento(form, button.getAttribute('data-choice'), button);
+            var interesse = button.getAttribute('data-choice');
+            form.setAttribute('data-selected-interest', interesse);
+            form.querySelectorAll('.event-vote-choice').forEach(function (choice) {
+                var selezionato = choice === button;
+                choice.classList.toggle('is-selected', selezionato);
+                choice.setAttribute('aria-pressed', selezionato ? 'true' : 'false');
+            });
+            form.querySelector('.public-event-choice-hint').textContent = interesse === 'si'
+                ? 'Hai scelto Sì. Se vuoi, indica le date preferite e poi invia la risposta.'
+                : 'Hai scelto No. Puoi inviare la risposta quando sei pronto.';
+            if (interesse === 'no') {
+                form.querySelectorAll('[data-role="preferenza"]').forEach(function (input) { input.checked = false; });
+                form.querySelector('.event-preference-details').open = false;
+            }
+            var submit = form.querySelector('.public-event-submit');
+            submit.disabled = false;
+            submit.textContent = interesse === 'si' ? 'Invia la mia risposta' : 'Invia la risposta';
         });
+    });
+    form.addEventListener('submit', function (event) {
+        event.preventDefault();
+        var interesse = form.getAttribute('data-selected-interest');
+        if (!interesse) {
+            form.querySelector('.public-event-choice-hint').textContent = 'Prima scegli Sì o No per poter inviare la risposta.';
+            form.querySelector('.event-vote-actions').scrollIntoView({ behavior: 'smooth', block: 'center' });
+            form.querySelector('.event-vote-yes').focus();
+            return;
+        }
+        inviaVotoPubblicoEvento(form, interesse);
     });
     form.elements.email.addEventListener('change', function () {
         precompilaRispostaOspite(form);
@@ -5661,8 +5697,14 @@ async function precompilaRispostaOspite(form) {
         input.checked = opzioniScelte.indexOf(Number(input.value)) !== -1;
     });
     form.querySelectorAll('.event-vote-choice').forEach(function (button) {
-        button.classList.toggle('is-selected', button.getAttribute('data-choice') === risposta.interesse);
+        var selezionato = button.getAttribute('data-choice') === risposta.interesse;
+        button.classList.toggle('is-selected', selezionato);
+        button.setAttribute('aria-pressed', selezionato ? 'true' : 'false');
     });
+    form.setAttribute('data-selected-interest', risposta.interesse);
+    var pulsanteInvio = form.querySelector('.public-event-submit');
+    pulsanteInvio.disabled = false;
+    pulsanteInvio.textContent = risposta.interesse === 'si' ? 'Aggiorna la mia risposta' : 'Aggiorna la risposta';
     form.querySelector('.event-preference-details').open = opzioniScelte.length > 0;
     avviso.textContent = risposta.facoltativa
         ? 'È stata aggiunta una nuova opzione: la tua risposta resta valida. Se vuoi, puoi includerla aggiornando le preferenze.'
@@ -5697,14 +5739,14 @@ async function aggiungiOpzionePubblicaEvento(form, pulsante) {
     showToast('Opzione aggiunta. I voti restano validi; chi vuole può aggiornare le preferenze.', 'success');
 }
 
-async function inviaVotoPubblicoEvento(form, interesse, pulsante) {
+async function inviaVotoPubblicoEvento(form, interesse) {
     if (!form.reportValidity()) return;
     var opzioni = interesse === 'si'
         ? Array.prototype.map.call(form.querySelectorAll('[data-role="preferenza"]:checked'), function (input) { return Number(input.value); })
         : [];
-    var pulsantiVoto = form.querySelectorAll('.event-vote-choice');
-    pulsantiVoto.forEach(function (button) { button.disabled = true; });
-    if (pulsante) pulsante.textContent = 'Registrazione...';
+    var pulsanteInvio = form.querySelector('.public-event-submit');
+    form.querySelectorAll('button').forEach(function (button) { button.disabled = true; });
+    pulsanteInvio.textContent = 'Invio in corso...';
 
     var dati = {
         nome: form.elements.nome.value.trim(),
@@ -5717,14 +5759,14 @@ async function inviaVotoPubblicoEvento(form, interesse, pulsante) {
         return null;
     });
     if (!result) {
-        pulsantiVoto.forEach(function (button) { button.disabled = false; });
-        if (pulsante) pulsante.textContent = interesse === 'si' ? '👍 Sì, partecipo' : 'No';
+        form.querySelectorAll('button').forEach(function (button) { button.disabled = false; });
+        pulsanteInvio.textContent = interesse === 'si' ? 'Invia la mia risposta' : 'Invia la risposta';
         return;
     }
     if (!result.ok) {
         showToast(messaggioErroreVotoEvento(result.messaggio), 'error');
-        pulsantiVoto.forEach(function (button) { button.disabled = false; });
-        if (pulsante) pulsante.textContent = interesse === 'si' ? '👍 Sì, partecipo' : 'No';
+        form.querySelectorAll('button').forEach(function (button) { button.disabled = false; });
+        pulsanteInvio.textContent = interesse === 'si' ? 'Invia la mia risposta' : 'Invia la risposta';
         return;
     }
     form.innerHTML = '<p class="event-vote-confirmation" role="status">Grazie, la tua risposta è stata registrata.</p>';
@@ -5741,6 +5783,12 @@ async function inviaPropostaEvento() {
 
     var titolo = nome.value.trim();
     var testo = descrizione ? descrizione.value.trim() : '';
+    if (!titolo) {
+        showToast('Inserisci il titolo dell’evento.', 'error');
+        nome.focus();
+        return;
+    }
+
     var optionsList = document.getElementById('eventOptionsList');
     var rows = optionsList ? Array.prototype.slice.call(optionsList.querySelectorAll('.event-option-row')) : [];
 
@@ -5758,14 +5806,32 @@ async function inviaPropostaEvento() {
 
         // Se uno solo dei due è compilato, avvisa l'utente
         if (!dataVal || !oraVal) {
-            showToast('Completa sia la data sia l’ora di ogni riga, oppure rimuovi la riga incompleta.', 'error');
+            showToast('Completa data e ora della riga ' + (i + 1) + ', oppure rimuovi la riga incompleta.', 'error');
+            (dataEl && !dataVal ? dataEl : oraEl).focus();
             return;
         }
 
         var matchData = dataVal.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
+        if (!matchData) {
+            showToast('La data della riga ' + (i + 1) + ' non è completa. Usa il formato gg/mm/aaaa, ad esempio 22/02/2027.', 'error');
+            dataEl.focus();
+            return;
+        }
+        if (!parseDataEvento_(dataVal)) {
+            showToast('La data della riga ' + (i + 1) + ' non è valida. Controlla giorno e mese (il mese va da 01 a 12).', 'error');
+            dataEl.focus();
+            return;
+        }
+
         var matchOra = oraVal.match(/^(\d{2}):(\d{2})$/);
-        if (!matchData || !matchOra) {
-            showToast('Formato non valido: usa gg/mm/aaaa per la data e hh:mm per l’ora.', 'error');
+        if (!matchOra) {
+            showToast('L’orario della riga ' + (i + 1) + ' non è completo. Usa il formato hh:mm, ad esempio 19:30.', 'error');
+            oraEl.focus();
+            return;
+        }
+        if (Number(matchOra[1]) > 23 || Number(matchOra[2]) > 59) {
+            showToast('L’orario della riga ' + (i + 1) + ' non è valido. Inserisci un orario tra 00:00 e 23:59.', 'error');
+            oraEl.focus();
             return;
         }
 
@@ -5774,11 +5840,6 @@ async function inviaPropostaEvento() {
             ora: oraVal,
             luogo: luogoVal
         });
-    }
-
-    if (!titolo) {
-        showToast('Inserisci il titolo dell’evento.', 'error');
-        return;
     }
 
     if (opzioni.length === 0) {

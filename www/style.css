@@ -1367,6 +1367,78 @@
   line-height: 1.5;
 }
 
+.public-event-intro {
+  margin: 0;
+  padding: 12px 14px;
+  border-left: 3px solid var(--gold-strong);
+  border-radius: 8px;
+  background: #fbf8f0;
+  color: var(--navy);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.public-event-step {
+  display: grid;
+  gap: 8px;
+}
+
+.public-event-step h2 {
+  margin: 0;
+  color: var(--navy);
+  font-size: 16px;
+  line-height: 1.35;
+}
+
+.public-event-step>p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.public-event-step .event-vote-actions {
+  margin-top: 4px;
+}
+
+.public-event-choice-hint {
+  min-height: 20px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.public-event-vote-view .public-event-submit {
+  width: 100%;
+  min-height: 52px;
+  padding: 13px 18px;
+  border: 0;
+  border-radius: 10px;
+  background: #16794b;
+  color: #fff;
+  font: inherit;
+  font-size: 16px;
+  font-weight: 750;
+  cursor: pointer;
+  transition: background 160ms ease, transform 160ms ease, box-shadow 160ms ease;
+}
+
+.public-event-vote-view .public-event-submit:not(:disabled):hover {
+  transform: translateY(-1px);
+  background: #12663f;
+  box-shadow: 0 8px 18px rgba(22, 121, 75, 0.2);
+}
+
+.public-event-vote-view .public-event-submit:disabled {
+  background: #8caa9a;
+  cursor: not-allowed;
+}
+
+.public-event-vote-view .event-vote-choice:focus-visible,
+.public-event-vote-view .public-event-submit:focus-visible {
+  outline: 3px solid rgba(22, 121, 75, 0.28);
+  outline-offset: 3px;
+}
+
 .public-event-back {
   display: inline-block;
   margin-top: 18px;

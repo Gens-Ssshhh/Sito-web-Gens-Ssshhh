@@ -467,6 +467,15 @@ test('eventi: condivide la proposta e consente ai soci di aggiornare il voto', (
     opzioni: [{ data: '10/10/2026', ora: '20:00', luogo: 'Centro' }]
   });
   assert.equal(proposta.ok, true);
+  const dataNonValida = context.creaPropostaEvento('mario@example.it', 'pw', {
+    titolo: 'Prova data',
+    opzioni: [
+      { data: '23/10/2026', ora: '11:22', luogo: '' },
+      { data: '22/21/2027', ora: '23:00', luogo: '' }
+    ]
+  });
+  assert.equal(dataNonValida.ok, false);
+  assert.match(dataNonValida.messaggio, /data o un orario non è valido/i);
   assert.equal(context.getProposteEventi('mario@example.it').length, 1);
   assert.equal(context.votaPropostaEvento('mario@example.it', 'evento-1', 0).ok, true);
   const votoAggiornato = context.votaPropostaEvento('mario@example.it', 'evento-1', { interesse: 'no', opzioni: [] });

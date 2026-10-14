@@ -267,11 +267,24 @@ function nav(viewId, el) {
 
     // 1. GESTIONE PAGINE (Nascondi tutte, mostra quella giusta)
     document.querySelectorAll('.page-section').forEach(x => {
-        x.classList.remove('active', 'hidden');
+        x.classList.remove('active');
+        x.classList.add('hidden');
+    });
+    document.querySelectorAll('.admin-tab-content').forEach(x => {
+        x.classList.add('hidden');
     });
     var requestedView = document.getElementById(viewId);
     if (!requestedView) return;
+    requestedView.classList.remove('hidden');
     requestedView.classList.add('active');
+
+    if (viewId === 'viewAdmin') {
+        var defaultAdminTab = document.getElementById('tabDash');
+        if (defaultAdminTab) defaultAdminTab.classList.remove('hidden');
+        document.querySelectorAll('.admin-tabs .pill').forEach(function (pill, index) {
+            pill.classList.toggle('active', index === 0);
+        });
+    }
     var contentScroll = document.querySelector('.content-scroll');
     if (contentScroll) contentScroll.scrollTop = 0;
 

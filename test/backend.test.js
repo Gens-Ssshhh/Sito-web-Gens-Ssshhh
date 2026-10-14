@@ -1124,6 +1124,7 @@ function creaContestoRicompilazione_(votiIniziali, emails, pushes) {
     SpreadsheetApp: { getActiveSpreadsheet: () => spreadsheet },
     LockService: { getScriptLock: () => ({ waitLock() { }, releaseLock() { } }) },
     Utilities: {
+      getUuid: () => 'token-ospite',
       DigestAlgorithm: { SHA_256: 'SHA_256' },
       computeDigest: (algorithm, value) => Array.from(Buffer.from(value, 'utf8').subarray(0, 4))
     },
@@ -1294,6 +1295,11 @@ test('eventi: un ospite con richiesta di ricompilazione sostituisce il voto prec
   const risposta = opzioni => ({ nome: 'Lucia', email: 'lucia@example.net', interesse: 'si', opzioni });
 
   assert.equal(context.votaPropostaEvento('', 'evento-refill', risposta([0])).ok, true);
+  assert.equal(emails.length, 1);
+  assert.equal(emails[0].to, 'lucia@example.net');
+  assert.match(emails[0].body, /Partecipo/);
+  assert.match(emails[0].body, /modifica=token-ospite/);
+  emails.length = 0;
   const modifica = context.modificaPropostaEvento({
     email: 'mario@example.it', password: 'pw', propostaId: 'evento-refill',
     proposta: {
@@ -1311,6 +1317,16 @@ test('eventi: un ospite con richiesta di ricompilazione sostituisce il voto prec
   assert.equal(JSON.stringify(nuovoVoto.voti.opzioni), JSON.stringify([0, 1]));
   assert.equal(nuovoVoto.voti.interesse.si, 1);
   assert.equal(voti()._ricompilazione, undefined);
+
+  const prefill = context.getRispostaRicompilazioneOspite({ id: 'evento-refill', token: 'token-ospite' });
+  assert.equal(prefill.email, 'lucia@example.net');
+  assert.equal(prefill.interesse, 'si');
+  assert.equal(context.getRispostaRicompilazioneOspite({ id: 'evento-refill', token: 'sbagliato' }), null);
+  assert.equal(context.votaPropostaEvento('', 'evento-refill', risposta([0])).messaggio, 'Hai già votato questa proposta.');
+  const viaLink = context.votaPropostaEvento('', 'evento-refill', Object.assign(risposta([0]), { token: 'token-ospite' }));
+  assert.equal(viaLink.ok, true);
+  assert.equal(JSON.stringify(viaLink.voti.opzioni), JSON.stringify([1, 0]));
+  assert.equal(viaLink.voti.interesse.si, 1);
 });
 
 test('eventi: il dispatcher serve il link pubblico e registra il voto esterno', () => {
@@ -1328,6 +1344,7 @@ test('eventi: il dispatcher serve il link pubblico e registra il voto esterno', 
   const context = {
     SpreadsheetApp: { getActiveSpreadsheet: () => spreadsheet },
     Utilities: {
+      getUuid: () => 'token-web',
       DigestAlgorithm: { SHA_256: 'SHA_256' },
       computeDigest: (algorithm, value) => Array.from(Buffer.from(value, 'utf8').subarray(0, 4))
     },

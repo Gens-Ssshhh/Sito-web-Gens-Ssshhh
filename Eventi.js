@@ -468,6 +468,28 @@ function identitaVotanteEvento_(email, dati) {
   return { chiave: 'ospite:' + hashEmailEvento_(emailOspite), email: emailOspite, nome: nome, socio: false };
 }
 
+function inviaCopiaRispostaOspiteEvento_(identita, titolo, propostaId, interessato, opzioniScelte, token) {
+  try {
+    var url = 'https://gensssshhh-collab.github.io/Sito-web-Gens-Ssshhh/index.html?evento=' + encodeURIComponent(propostaId) + '&modifica=' + encodeURIComponent(token);
+    var etichette = (opzioniScelte || []).map(function (opzione) {
+      return [opzione.data, opzione.ora, opzione.luogo].filter(Boolean).join(' · ');
+    });
+    var rispostaTesto = interessato === 'si' ? 'Partecipo' : 'Non partecipo';
+    var testo = 'Ciao ' + identita.nome + ',\nabbiamo registrato la tua risposta per "' + titolo + '".\n\nRisposta: ' + rispostaTesto +
+      (etichette.length ? '\nDate e orari scelti:\n- ' + etichette.join('\n- ') : '') +
+      '\n\nSe hai sbagliato qualcosa puoi compilare di nuovo il modulo da questo link personale (non condividerlo):\n' + url + '\n\nGens Ssshhh';
+    var html = '<div style="font-family:Arial,sans-serif;color:#243247;line-height:1.5">' +
+      '<p>Ciao ' + escapeHtmlEvento_(identita.nome) + ',<br>abbiamo registrato la tua risposta per:</p><h2>' + escapeHtmlEvento_(titolo) + '</h2>' +
+      '<p><strong>Risposta:</strong> ' + rispostaTesto + '</p>' +
+      (etichette.length ? '<p><strong>Date e orari scelti:</strong></p><ul>' + etichette.map(function (voce) { return '<li>' + escapeHtmlEvento_(voce) + '</li>'; }).join('') + '</ul>' : '') +
+      '<p>Se hai sbagliato qualcosa puoi <a href="' + url + '">compilare di nuovo il modulo</a>. Il link è personale: non condividerlo.</p>' +
+      '<p>Gens Ssshhh</p></div>';
+    MailApp.sendEmail({ to: identita.email, subject: 'La tua risposta: ' + titolo, body: testo, htmlBody: html, name: 'Gens Ssshhh' });
+  } catch (e) {
+    console.log('Invio copia risposta ospite non completato: ' + e);
+  }
+}
+
 function votaPropostaEvento(email, propostaId, risposta) {
   var socio = String(email || '').trim().toLowerCase();
   var rispostaVoto = typeof risposta === 'number'
@@ -478,6 +500,7 @@ function votaPropostaEvento(email, propostaId, risposta) {
   var identita = identitaVotanteEvento_(socio, rispostaVoto);
   if (identita.errore) return { ok: false, messaggio: identita.errore };
   var chiaveVotante = identita.chiave;
+  var tokenOspite = '';
 
   if (interessato !== 'si' && interessato !== 'no') {
     return { ok: false, messaggio: 'Indica se ti interessa partecipare.' };
@@ -511,9 +534,12 @@ function votaPropostaEvento(email, propostaId, risposta) {
     var ricompilazione = votiEsistenti.ricompilazione;
     var chiaveEsistente = votanti[chiaveVotante] !== undefined ? chiaveVotante : (socio && votanti[socio] !== undefined ? socio : null);
     if (chiaveEsistente !== null) {
-      if (ricompilazione[chiaveEsistente] === undefined && !identita.socio) {
+      var votoPrecedente = votanti[chiaveEsistente];
+      var tokenValido = !identita.socio && rispostaVoto.token && votoPrecedente && votoPrecedente.token === String(rispostaVoto.token);
+      if (ricompilazione[chiaveEsistente] === undefined && !identita.socio && !tokenValido) {
         return { ok: false, messaggio: 'Hai già votato questa proposta.' };
       }
+      if (votoPrecedente && votoPrecedente.token) tokenOspite = votoPrecedente.token;
       rimuoviContributoVotoEvento_(votiEsistenti.riepilogo, votanti, chiaveEsistente);
       delete ricompilazione[chiaveEsistente];
     }
@@ -522,8 +548,15 @@ function votaPropostaEvento(email, propostaId, risposta) {
     interesse[interessato]++;
     scelte.forEach(function (indice) { votiEsistenti.riepilogo.opzioni[indice]++; });
     votanti[chiaveVotante] = { interesse: interessato, opzioni: scelte, email: identita.email, nome: identita.nome };
+    if (!identita.socio) {
+      tokenOspite = tokenOspite || Utilities.getUuid();
+      votanti[chiaveVotante].token = tokenOspite;
+    }
 
     sheet.getRange(rowIndex + 1, 7).setValue(JSON.stringify(datiVotiDaSalvare_(votiEsistenti.riepilogo, votanti, ricompilazione)));
+    if (!identita.socio) {
+      inviaCopiaRispostaOspiteEvento_(identita, row[3], propostaId, interessato, scelte.map(function (indice) { return opzioni[indice]; }), tokenOspite);
+    }
     return { ok: true, voti: votiEsistenti.riepilogo };
   } finally {
     lock.releaseLock();
@@ -624,8 +657,9 @@ function inviaAggiuntaOpzioneAlCreatorePropostaEvento_(emailCreatore, titolo, no
 function getRispostaRicompilazioneOspite(dati) {
   dati = dati || {};
   var id = String(dati.id || dati.propostaId || '');
+  var token = String(dati.token || '');
   var emailOspite = String(dati.email || '').trim().toLowerCase();
-  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(emailOspite) || verificaSocioEvento_(emailOspite)) return null;
+  if (!token && (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(emailOspite) || verificaSocioEvento_(emailOspite))) return null;
 
   var chiave = 'ospite:' + hashEmailEvento_(emailOspite);
   var values = getFoglioProposteEventi_().getDataRange().getValues();
@@ -637,18 +671,30 @@ function getRispostaRicompilazioneOspite(dati) {
   var opzioni = [];
   try { opzioni = JSON.parse(row[5] || '[]'); } catch (e) { }
   var voti = leggiVotiEvento_(row[6], opzioni, '');
+  if (token) {
+    chiave = Object.keys(voti.votanti).find(function (k) {
+      var voto = voti.votanti[k];
+      return k.indexOf('ospite:') === 0 && voto && typeof voto === 'object' && voto.token === token;
+    });
+    if (!chiave) return null;
+  }
   var risposta = voti.votanti[chiave];
-  if (voti.ricompilazione[chiave] === undefined || !risposta || typeof risposta !== 'object') return null;
+  if (!token && (voti.ricompilazione[chiave] === undefined || !risposta || typeof risposta !== 'object')) return null;
 
   var indici = (Array.isArray(risposta.opzioni) ? risposta.opzioni : []).map(Number).filter(function (indice) {
     return Number.isInteger(indice) && indice >= 0 && indice < opzioni.length;
   });
-  return {
+  var risultato = {
     nome: String(risposta.nome || ''),
     interesse: risposta.interesse === 'no' ? 'no' : 'si',
     opzioni: indici,
-    facoltativa: String(voti.ricompilazione[chiave]).indexOf('FACOLTATIVA:') === 0
+    facoltativa: voti.ricompilazione[chiave] !== undefined && String(voti.ricompilazione[chiave]).indexOf('FACOLTATIVA:') === 0
   };
+  if (token) {
+    risultato.email = String(risposta.email || '');
+    risultato.daToken = true;
+  }
+  return risultato;
 }
 
 function confermaEventoProposto(dati) {

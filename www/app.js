@@ -1991,9 +1991,10 @@ window.onload = function () {
         document.getElementById('publicAdmissionForm').addEventListener('submit', inviaRichiestaIscrizione);
         return;
     }
-    var propostaPubblicaId = new URLSearchParams(window.location.search).get('evento');
+    var parametriPubblici = new URLSearchParams(window.location.search);
+    var propostaPubblicaId = parametriPubblici.get('evento');
     if (propostaPubblicaId) {
-        apriVotoPubblicoEvento(propostaPubblicaId);
+        apriVotoPubblicoEvento(propostaPubblicaId, parametriPubblici.get('modifica') || '');
         return;
     }
 
@@ -5603,7 +5604,7 @@ async function condividiPropostaEvento(propostaId) {
     }
 }
 
-async function apriVotoPubblicoEvento(propostaId) {
+async function apriVotoPubblicoEvento(propostaId, tokenModifica) {
     document.querySelectorAll('.fullscreen-view').forEach(function (vista) { vista.classList.add('hidden'); });
     document.getElementById('publicEventVoteView').classList.remove('hidden');
     var contenuto = document.getElementById('publicEventVoteContent');
@@ -5638,6 +5639,10 @@ async function apriVotoPubblicoEvento(propostaId) {
         '<p class="public-event-privacy">L’e-mail non viene mostrata agli altri partecipanti.</p></form>';
 
     var form = document.getElementById('publicEventVoteForm');
+    if (tokenModifica) {
+        form.setAttribute('data-token', tokenModifica);
+        precompilaRispostaOspite(form);
+    }
     form.querySelectorAll('.event-vote-choice').forEach(function (button) {
         button.addEventListener('click', function () {
             var interesse = button.getAttribute('data-choice');
@@ -5690,14 +5695,21 @@ function htmlPreferenzaPubblicaEvento_(opzione, indice, conteggio, selezionata) 
 
 async function precompilaRispostaOspite(form) {
     var emailInput = form.elements.email;
+    var token = form.getAttribute('data-token') || '';
     var email = emailInput.value.trim();
     var avviso = form.querySelector('.public-event-notice');
     avviso.classList.add('hidden');
-    if (!email || !emailInput.checkValidity()) return;
+    if (!token && (!email || !emailInput.checkValidity())) return;
 
-    var risposta = await chiamaServer('getRispostaRicompilazioneOspite', { id: form.getAttribute('data-event-id'), email: email });
-    if (!risposta || emailInput.value.trim() !== email) return;
+    var risposta = await chiamaServer('getRispostaRicompilazioneOspite', token
+        ? { id: form.getAttribute('data-event-id'), token: token }
+        : { id: form.getAttribute('data-event-id'), email: email });
+    if (!risposta || (!token && emailInput.value.trim() !== email)) return;
 
+    if (token && risposta.email) {
+        emailInput.value = risposta.email;
+        emailInput.readOnly = true;
+    }
     if (risposta.nome && !form.elements.nome.value.trim()) form.elements.nome.value = risposta.nome;
     var opzioniScelte = Array.isArray(risposta.opzioni) ? risposta.opzioni.map(Number) : [];
     form.querySelectorAll('[data-role="preferenza"]').forEach(function (input) {
@@ -5771,6 +5783,8 @@ async function inviaVotoPubblicoEvento(form, interesse) {
         interesse: interesse,
         opzioni: opzioni
     };
+    var tokenModifica = form.getAttribute('data-token');
+    if (tokenModifica) dati.token = tokenModifica;
     var result = await chiamaServer('votaPropostaEvento', ['', form.getAttribute('data-event-id'), dati], true).catch(function (error) {
         showToast(error.message || 'Impossibile registrare la risposta.', 'error');
         return null;
@@ -5786,7 +5800,7 @@ async function inviaVotoPubblicoEvento(form, interesse) {
         pulsanteInvio.textContent = interesse === 'si' ? 'Invia la mia risposta' : 'Invia la risposta';
         return;
     }
-    form.innerHTML = '<p class="event-vote-confirmation" role="status">Grazie, la tua risposta è stata registrata.</p>';
+    form.innerHTML = '<p class="event-vote-confirmation" role="status">Grazie, la tua risposta è stata registrata. Ti abbiamo inviato una copia per e-mail, con un link per modificarla se serve.</p>';
 }
 
 async function inviaPropostaEvento() {

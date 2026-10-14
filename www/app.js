@@ -144,15 +144,6 @@ function inizializzaNotifichePush() {
             piattaforma: 'android'
         });
     });
-    list.querySelectorAll('.event-vote-toggle').forEach(function (button) {
-        button.addEventListener('click', function () {
-            var panel = button.closest('.event-vote-entry').querySelector('.event-vote-submodule');
-            panel.hidden = !panel.hidden;
-            button.setAttribute('aria-expanded', String(!panel.hidden));
-            button.textContent = panel.hidden ? button.getAttribute('data-label') : 'Chiudi scheda voto';
-        });
-    });
-
     PushNotifications.addListener('registrationError', function (error) {
         console.error('Registrazione notifiche push fallita:', error);
     });
@@ -5298,6 +5289,14 @@ function renderProposteEventi(proposte) {
             riepilogoOpzioniHtml + sezioneVotoHtml + aggiungiOpzioneHtml + '</article></section></div>';
     }).join('');
 
+    list.querySelectorAll('.event-vote-toggle').forEach(function (button) {
+        button.addEventListener('click', function () {
+            var panel = button.closest('.event-vote-entry').querySelector('.event-vote-submodule');
+            panel.hidden = !panel.hidden;
+            button.setAttribute('aria-expanded', String(!panel.hidden));
+            button.textContent = panel.hidden ? button.getAttribute('data-label') : 'Chiudi scheda voto';
+        });
+    });
     list.querySelectorAll('.event-proposal-tile').forEach(function (tile) {
         tile.addEventListener('click', function () {
             apriDettaglioPropostaEvento_(tile);

@@ -9,7 +9,7 @@ function getFoglioProposteEventi_() {
     sheet.appendRow(['ID', 'CreatoIl', 'CreatoreEmail', 'Titolo', 'Descrizione', 'OpzioniJson', 'VotiJson', 'Stato']);
   }
   var headers = sheet.getDataRange().getValues()[0] || [];
-  [['EventoCalendarId', 8], ['OpzioneConfermataJson', 9], ['PromemoriaNonVotantiInviatoIl', 10]].forEach(function (item) {
+  [['EventoCalendarId', 8], ['OpzioneConfermataJson', 9], ['PromemoriaNonVotantiInviatoIl', 10], ['NotificaSoci', 11]].forEach(function (item) {
     if (String(headers[item[1]] || '') !== item[0]) sheet.getRange(1, item[1] + 1).setValue(item[0]);
   });
   return sheet;
@@ -252,7 +252,8 @@ function preparaPropostaEvento_(row, email) {
     mioVoto: voti.mioVoto,
     ricompilazioneRichiesta: !!(chiaveRicompilazione !== null && !ricompilazioneFacoltativa),
     ricompilazioneFacoltativa: ricompilazioneFacoltativa,
-    creatore: creatore
+    creatore: creatore,
+    notificaSoci: row[11] !== false
   };
 }
 
@@ -284,6 +285,7 @@ function creaPropostaEvento(email, password, proposta) {
 
   var titolo = String(proposta.titolo || '').trim();
   var descrizione = String(proposta.descrizione || '').trim();
+  var inviaNotifica = proposta.inviaNotifica !== false;
   var opzioni = normalizzaOpzioniEvento_(proposta.opzioni);
   if (!titolo) return { ok: false, messaggio: 'Inserisci il titolo dell’evento.' };
   if (!opzioni.length) return { ok: false, messaggio: 'Inserisci almeno una data e un orario per la proposta.' };
@@ -301,18 +303,24 @@ function creaPropostaEvento(email, password, proposta) {
     descrizione,
     JSON.stringify(opzioni),
     JSON.stringify({}),
-    'ATTIVA'
+    'ATTIVA',
+    '',
+    '',
+    '',
+    inviaNotifica
   ]);
 
   try { configuraTriggerPromemoriaProposteEvento_(); } catch (e) { console.log('Trigger promemoria eventi non configurato: ' + e); }
-  try {
-    inviaComunicazioniPropostaEvento_(
-      sociAttiviProposteEvento_(),
-      titolo,
-      id,
-      false
-    );
-  } catch (e) { console.log('Notifica nuova proposta evento non completata: ' + e); }
+  if (inviaNotifica) {
+    try {
+      inviaComunicazioniPropostaEvento_(
+        sociAttiviProposteEvento_(),
+        titolo,
+        id,
+        false
+      );
+    } catch (e) { console.log('Notifica nuova proposta evento non completata: ' + e); }
+  }
 
   return { ok: true, proposta: { id: id, titolo: titolo, descrizione: descrizione, opzioni: opzioni, voti: {} } };
 }
@@ -360,6 +368,7 @@ function modificaPropostaEvento(dati) {
 }
 
 function inviaConfermaModificaCreatorePropostaEvento_(emailCreatore, titolo, numeroAvvisati) {
+  if (!notificaAbilitata_(emailCreatore, 'evento_modifica_creatore', 'email')) return;
   var messaggio = numeroAvvisati
     ? 'Hai modificato date, orari o luoghi. Abbiamo avvisato ' + numeroAvvisati + (numeroAvvisati === 1 ? ' persona' : ' persone') + ' che avevano già risposto, chiedendo di ricompilare il questionario.'
     : 'Hai modificato date, orari o luoghi. Non c\'è nessun altro votante da avvisare.';
@@ -644,6 +653,7 @@ function aggiungiOpzionePropostaEvento(email, propostaId, opzione) {
 }
 
 function inviaAggiuntaOpzioneAlCreatorePropostaEvento_(emailCreatore, titolo, nomeAutore, opzione) {
+  if (!notificaAbilitata_(emailCreatore, 'evento_nuova_opzione', 'email')) return;
   var luogo = opzione.luogo ? ' · ' + opzione.luogo : '';
   try {
     MailApp.sendEmail({
@@ -805,6 +815,9 @@ function escapeHtmlEvento_(valore) {
 
 function inviaComunicazioniPropostaEvento_(emails, titolo, propostaId, promemoria) {
   if (!emails.length) return;
+  var tipoNotifica = promemoria ? 'evento_promemoria' : 'evento_nuovo';
+  var emailMail = filtraDestinatariNotifica_(emails, tipoNotifica, 'email');
+  var emailPush = filtraDestinatariNotifica_(emails, tipoNotifica, 'app');
   var oggetto = promemoria ? 'Promemoria: questionario evento' : 'Nuovo questionario evento';
   var testoEvento = escapeHtmlEvento_(titolo);
   var url = 'https://Gens-Ssshhh.github.io/Sito-web-Gens-Ssshhh/index.html';
@@ -817,8 +830,8 @@ function inviaComunicazioniPropostaEvento_(emails, titolo, propostaId, promemori
     '<p>Gens Ssshhh</p></div>';
 
   try {
-    for (var inizio = 0; inizio < emails.length; inizio += 40) {
-      var gruppo = emails.slice(inizio, inizio + 40);
+    for (var inizio = 0; inizio < emailMail.length; inizio += 40) {
+      var gruppo = emailMail.slice(inizio, inizio + 40);
       MailApp.sendEmail({
         to: 'undisclosed-recipients@gmail.com',
         bcc: gruppo.join(','),
@@ -833,8 +846,8 @@ function inviaComunicazioniPropostaEvento_(emails, titolo, propostaId, promemori
   }
 
   try {
-    if (typeof inviaNotificaPush === 'function') {
-      inviaNotificaPush(oggetto, 'Partecipa al questionario: ' + titolo, emails, 'viewCalendario');
+    if (emailPush.length && typeof inviaNotificaPush === 'function') {
+      inviaNotificaPush(oggetto, 'Partecipa al questionario: ' + titolo, emailPush, 'viewCalendario');
     }
   } catch (e) {
     console.log('Invio push questionario evento non completato: ' + e);
@@ -842,6 +855,7 @@ function inviaComunicazioniPropostaEvento_(emails, titolo, propostaId, promemori
 }
 
 function inviaEmailRicompilazioneEvento_(destinatari, titolo, intro, url, etichettaLink) {
+  if (!destinatari.length) return;
   var oggetto = 'Ricompila il questionario evento';
   var testoEvento = escapeHtmlEvento_(titolo);
   var body = intro + '\n\n' + titolo + '\n\n' + etichettaLink + ': ' + url;
@@ -878,7 +892,7 @@ function inviaRichiestaRicompilazionePropostaEvento_(contatti, titolo, propostaI
 
   var introModifica = 'Il creatore ha modificato date, orari o luoghi di questo evento. Ti chiediamo di confermare di nuovo la tua disponibilità.';
   if (emailSocie.length) {
-    inviaEmailRicompilazioneEvento_(emailSocie, titolo,
+    inviaEmailRicompilazioneEvento_(filtraDestinatariNotifica_(emailSocie, 'evento_ricompila', 'email'), titolo,
       introModifica + ' Accedi al portale soci per aggiornare la tua risposta.',
       'https://Gens-Ssshhh.github.io/Sito-web-Gens-Ssshhh/index.html',
       'Accedi al portale soci');
@@ -890,8 +904,9 @@ function inviaRichiestaRicompilazionePropostaEvento_(contatti, titolo, propostaI
   }
 
   try {
-    if (emailSocie.length && typeof inviaNotificaPush === 'function') {
-      inviaNotificaPush('Ricompila il questionario evento', 'Ricompila la tua risposta per: ' + titolo, emailSocie, 'viewCalendario');
+    var emailSociPush = filtraDestinatariNotifica_(emailSocie, 'evento_ricompila', 'app');
+    if (emailSociPush.length && typeof inviaNotificaPush === 'function') {
+      inviaNotificaPush('Ricompila il questionario evento', 'Ricompila la tua risposta per: ' + titolo, emailSociPush, 'viewCalendario');
     }
   } catch (e) {
     console.log('Invio push ricompilazione evento non completato: ' + e);
@@ -914,7 +929,7 @@ function inviaPromemoriaProposteEvento() {
 
   for (var i = 1; i < rows.length; i++) {
     var row = rows[i];
-    if (String(row[7] || 'ATTIVA') !== 'ATTIVA' || row[10]) continue;
+    if (String(row[7] || 'ATTIVA') !== 'ATTIVA' || row[10] || row[11] === false) continue;
     var creataIl = row[1] instanceof Date ? row[1] : new Date(row[1]);
     if (isNaN(creataIl.getTime()) || adesso.getTime() - creataIl.getTime() < 3 * 86400000) continue;
 

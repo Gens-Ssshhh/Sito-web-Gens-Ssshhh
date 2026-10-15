@@ -342,6 +342,91 @@
   border-left: 3px solid var(--gold);
 }
 
+.config-notification-center {
+  grid-column: 1 / -1;
+}
+
+.notification-prefs-toolbar {
+  display: flex;
+  width: 100%;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+}
+
+.notification-prefs-list {
+  display: grid;
+  width: 100%;
+  gap: 18px;
+  margin-top: 10px;
+}
+
+.notification-prefs-group h4 {
+  margin: 0 0 4px;
+  color: var(--navy);
+  font-size: 13px;
+}
+
+.notification-pref-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 64px 64px;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 0;
+  border-top: 1px solid var(--line);
+  color: var(--navy);
+}
+
+.notification-pref-row.notification-pref-head {
+  padding: 4px 0;
+  border-top: 0;
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.notification-pref-row.notification-pref-head span:not(:first-child),
+.notification-pref-channel {
+  text-align: center;
+}
+
+.notification-pref-info {
+  display: grid;
+  gap: 3px;
+}
+
+.notification-pref-info strong {
+  font-size: 13px;
+}
+
+.notification-pref-info small {
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.4;
+}
+
+.notification-pref-channel input {
+  width: 20px;
+  height: 20px;
+  accent-color: var(--navy);
+}
+
+.notification-pref-channel .notification-pref-na {
+  color: var(--muted);
+}
+
+.notification-pref-badge {
+  display: inline-block;
+  margin-left: 6px;
+  padding: 1px 6px;
+  border-radius: 10px;
+  background: #fee2e2;
+  color: #b91c1c;
+  font-size: 10px;
+  font-weight: 700;
+}
+
 .config-logout {
   color: #9f302b;
 }
@@ -5358,6 +5443,25 @@ textarea {
 .calendar-form-field textarea:focus {
   border-color: #c59d4b;
   outline: 3px solid rgba(197, 157, 75, 0.16);
+}
+
+.calendar-notification-option {
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+  color: var(--navy);
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 1.45;
+  cursor: pointer;
+}
+
+.calendar-notification-option input {
+  flex: 0 0 auto;
+  width: 17px;
+  height: 17px;
+  margin: 1px 0 0;
+  accent-color: #1e40af;
 }
 
 .calendar-options-heading {

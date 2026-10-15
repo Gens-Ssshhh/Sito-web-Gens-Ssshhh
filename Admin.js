@@ -467,7 +467,7 @@ function adminPubblicaNews(dati) {
   var id = "news_" + new Date().getTime();
 
   sheet.appendRow([new Date(), dati.titolo, dati.testo, id]);
-  try { inviaNotificaPush(dati.titolo, dati.testo); } catch (e) { console.log(e); }
+  try { inviaNotificaPush(dati.titolo, dati.testo, null, undefined, "news_pubblicate"); } catch (e) { console.log(e); }
   return "OK";
 }
 
@@ -770,12 +770,14 @@ function adminInviaSollecito(docName, listaEmail) {
                 </div>
             </div>`;
 
-      MailApp.sendEmail({
-        to: email,
-        subject: "🔔 Azione Richiesta: Firma in sospeso per " + docName,
-        htmlBody: htmlBody
-      });
-      inviaNotificaPushUtente(email, "Firma in sospeso", "Hai un documento in attesa di firma.", "viewFirma");
+      if (notificaAbilitata_(email, "firma_sollecito", "email")) {
+        MailApp.sendEmail({
+          to: email,
+          subject: "🔔 Azione Richiesta: Firma in sospeso per " + docName,
+          htmlBody: htmlBody
+        });
+      }
+      inviaNotificaPushUtente(email, "Firma in sospeso", "Hai un documento in attesa di firma.", "viewFirma", "firma_sollecito");
       count++;
     } catch (e) {
       console.log("Errore invio sollecito a " + email + ": " + e);
@@ -816,8 +818,10 @@ function adminEseguiControfirma(idRichiesta, adminEmail) {
 
   // Notifica Socio
   try {
-    MailApp.sendEmail(emailSocio, "✅ Documento Controfirmato", "Il documento è stato controfirmato dall'amministrazione ed è ora concluso.");
-    inviaNotificaPushUtente(emailSocio, "Documento controfirmato", "Il documento è stato controfirmato ed è ora concluso.", "viewFirma");
+    if (notificaAbilitata_(emailSocio, "firma_controfirma", "email")) {
+      MailApp.sendEmail(emailSocio, "✅ Documento Controfirmato", "Il documento è stato controfirmato dall'amministrazione ed è ora concluso.");
+    }
+    inviaNotificaPushUtente(emailSocio, "Documento controfirmato", "Il documento è stato controfirmato ed è ora concluso.", "viewFirma", "firma_controfirma");
   } catch (e) { }
 
   return "OK";
@@ -957,13 +961,15 @@ function adminChiudiEGeneraRegistroFirme(docName, adminEmail) {
     }
 
     // 5. INVIA MAIL ALL'ADMIN
-    MailApp.sendEmail({
-      to: adminEmail,
-      subject: "📁 Pratica Archiviata: " + docName,
-      htmlBody: "La pratica di firma per il documento <b>" + docName + "</b> è stata chiusa e archiviata in un faldone dedicato.<br><br>In allegato trovi il registro ufficiale. Entrambi i documenti (originale e registro) sono ora ordinati insieme nel Drive dell'associazione.",
-      attachments: [pdfBlob]
-    });
-    inviaNotificaPushUtente(adminEmail, "Pratica archiviata", "La pratica di firma per " + docName + " è stata archiviata.", "viewFirma");
+    if (notificaAbilitata_(adminEmail, "firma_archiviazione", "email")) {
+      MailApp.sendEmail({
+        to: adminEmail,
+        subject: "📁 Pratica Archiviata: " + docName,
+        htmlBody: "La pratica di firma per il documento <b>" + docName + "</b> è stata chiusa e archiviata in un faldone dedicato.<br><br>In allegato trovi il registro ufficiale. Entrambi i documenti (originale e registro) sono ora ordinati insieme nel Drive dell'associazione.",
+        attachments: [pdfBlob]
+      });
+    }
+    inviaNotificaPushUtente(adminEmail, "Pratica archiviata", "La pratica di firma per " + docName + " è stata archiviata.", "viewFirma", "firma_archiviazione");
 
     // 6. ARCHIVIAZIONE DEFINITIVA SU EXCEL
     righeDaArchiviare.forEach(function (riga) {
@@ -1193,7 +1199,9 @@ function inviaDigestSettimanale() {
     }
   }
 
-  if (destinatariBCC.length === 0) return;
+  var destinatariPush = filtraDestinatariNotifica_(destinatariBCC, "digest_settimanale", "app");
+  destinatariBCC = filtraDestinatariNotifica_(destinatariBCC, "digest_settimanale", "email");
+  if (destinatariBCC.length === 0 && destinatariPush.length === 0) return;
 
   // 4. COSTRUISCI HTML DELLA MAIL (Opzione B)
   var htmlBody = `
@@ -1254,9 +1262,6 @@ function inviaDigestSettimanale() {
         htmlBody: htmlBody,
         name: nomeAssociazione
       });
-      batch.forEach(function (email) {
-        inviaNotificaPushUtente(email, subject, "Hai ricevuto le novità della settimana.", "viewDash");
-      });
       console.log("Batch inviato: " + batch.length + " destinatari.");
     } catch (e) {
       console.log("Errore invio batch: " + e.toString());
@@ -1265,6 +1270,10 @@ function inviaDigestSettimanale() {
     // Pausa di sicurezza di 1 secondo tra un invio e l'altro
     Utilities.sleep(1000);
   }
+
+  destinatariPush.forEach(function (email) {
+    inviaNotificaPushUtente(email, subject, "Hai ricevuto le novità della settimana.", "viewDash");
+  });
 
   scriviLog(emailMittente, "DIGEST_SETTIMANALE", "Inviate " + newsRecenti.length + " news a " + destinatariBCC.length + " soci.");
 }

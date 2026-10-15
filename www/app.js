@@ -676,6 +676,87 @@ function renderConfigurazioneView() {
         passwordForm.dataset.handlerAttached = 'true';
         passwordForm.addEventListener('submit', salvaPasswordConfigurazione);
     }
+
+    caricaPreferenzeNotificheUtente();
+}
+
+function impostaStatoPreferenzeNotifiche(testo) {
+    var status = document.getElementById('notificationPrefsStatus');
+    if (status) status.textContent = testo || '';
+}
+
+async function caricaPreferenzeNotificheUtente() {
+    var contenitore = document.getElementById('notificationPrefsList');
+    if (!contenitore) return;
+    var risultato = await chiamaServer('getPreferenzeNotifiche');
+    if (!risultato || !Array.isArray(risultato.notifiche)) {
+        contenitore.innerHTML = '<p class="notification-empty">Impossibile caricare le preferenze. Riprova più tardi.</p>';
+        return;
+    }
+    renderPreferenzeNotifiche(risultato.notifiche);
+}
+
+function renderPreferenzeNotifiche(notifiche) {
+    var contenitore = document.getElementById('notificationPrefsList');
+    if (!contenitore) return;
+    var gruppi = [];
+    var perGruppo = {};
+    notifiche.forEach(function (voce) {
+        if (!perGruppo[voce.gruppo]) {
+            perGruppo[voce.gruppo] = [];
+            gruppi.push(voce.gruppo);
+        }
+        perGruppo[voce.gruppo].push(voce);
+    });
+
+    function cella(voce, canale, etichetta) {
+        var stato = voce[canale];
+        if (!stato) return '<span class="notification-pref-channel"><span class="notification-pref-na" title="Non prevista">—</span></span>';
+        return '<label class="notification-pref-channel"><input type="checkbox" data-id="' + escapeActionCenterText(voce.id) +
+            '" data-canale="' + canale + '"' + (stato.attiva ? ' checked' : '') + (stato.bloccata ? ' disabled title="Sempre attiva per sicurezza"' : '') +
+            ' aria-label="' + escapeActionCenterText(etichetta + ': ' + voce.titolo) + '" onchange="salvaPreferenzaNotifica(this)"></label>';
+    }
+
+    contenitore.innerHTML = gruppi.map(function (gruppo) {
+        return '<div class="notification-prefs-group"><h4>' + escapeActionCenterText(gruppo) + '</h4>' +
+            '<div class="notification-pref-row notification-pref-head"><span>Notifica</span><span>E-mail</span><span>App</span></div>' +
+            perGruppo[gruppo].map(function (voce) {
+                return '<div class="notification-pref-row"><div class="notification-pref-info"><strong>' + escapeActionCenterText(voce.titolo) +
+                    (voce.soloAdmin ? '<span class="notification-pref-badge">Admin</span>' : '') + '</strong><small>' +
+                    escapeActionCenterText(voce.descrizione) + '</small></div>' +
+                    cella(voce, 'email', 'E-mail') + cella(voce, 'app', 'App') + '</div>';
+            }).join('') + '</div>';
+    }).join('');
+}
+
+async function salvaPreferenzaNotifica(input) {
+    var id = input.dataset.id;
+    var canale = input.dataset.canale;
+    var preferenza = {};
+    preferenza[canale] = input.checked;
+    var preferenze = {};
+    preferenze[id] = preferenza;
+    impostaStatoPreferenzeNotifiche('Salvataggio…');
+    var risultato = await chiamaServer('salvaPreferenzeNotifiche', { preferenze: preferenze });
+    if (risultato && risultato.ok) {
+        impostaStatoPreferenzeNotifiche('Preferenze salvate.');
+        caricaNotifiche();
+    } else {
+        input.checked = !input.checked;
+        impostaStatoPreferenzeNotifiche('Non è stato possibile salvare. Riprova.');
+    }
+}
+
+async function ripristinaPreferenzeNotificheUtente() {
+    impostaStatoPreferenzeNotifiche('Ripristino…');
+    var risultato = await chiamaServer('ripristinaPreferenzeNotifiche');
+    if (risultato && risultato.ok) {
+        renderPreferenzeNotifiche(risultato.notifiche || []);
+        impostaStatoPreferenzeNotifiche('Impostazioni predefinite ripristinate.');
+        caricaNotifiche();
+    } else {
+        impostaStatoPreferenzeNotifiche('Non è stato possibile ripristinare. Riprova.');
+    }
 }
 
 async function salvaPasswordConfigurazione(event) {
@@ -5834,6 +5915,7 @@ async function inviaVotoPubblicoEvento(form, interesse) {
 async function inviaPropostaEvento() {
     var nome = document.getElementById('eventoNome');
     var descrizione = document.getElementById('eventoDescrizione');
+    var notificaSoci = document.getElementById('eventoNotificaSoci');
 
     if (!nome) {
         showToast('Modulo proposta evento non disponibile.', 'error');
@@ -5906,10 +5988,12 @@ async function inviaPropostaEvento() {
         return;
     }
 
+    var deveInviareNotifica = notificaSoci ? notificaSoci.checked : true;
     var result = await chiamaServer('creaPropostaEvento', [curEmail, curPass, {
         titolo: titolo,
         descrizione: testo,
-        opzioni: opzioni
+        opzioni: opzioni,
+        inviaNotifica: deveInviareNotifica
     }], true).catch(function (error) {
         showToast(error.message || 'Impossibile inviare la proposta.', 'error');
         return null;
@@ -5922,6 +6006,7 @@ async function inviaPropostaEvento() {
 
     nome.value = '';
     if (descrizione) descrizione.value = '';
+    if (notificaSoci) notificaSoci.checked = true;
 
     if (optionsList) {
         optionsList.innerHTML = htmlRigaOpzioneEvento_();
@@ -5932,7 +6017,9 @@ async function inviaPropostaEvento() {
     }
 
     caricaProposteEventi();
-    showToast('Proposta evento inviata e disponibile al voto.', 'success');
+    showToast(deveInviareNotifica
+        ? 'Proposta evento inviata e notifica inviata ai soci.'
+        : 'Proposta evento inviata e disponibile al voto.', 'success');
 }
 
 async function caricaProposteEventi() {

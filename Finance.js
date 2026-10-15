@@ -436,6 +436,9 @@ function getSociPerFattura(adminEmail, password) {
 }
 
 function inviaFatturaSocio_(dati, nomeSocio, allegatoPdf, allegatoXml) {
+  if (!notificaAbilitata_(dati.email, "fattura_ricevuta", "email")) {
+    throw new Error("Il socio ha disattivato la ricezione delle fatture via e-mail.");
+  }
   var causale = String(dati.causale || "").trim();
   var importo = Number(dati.importo).toFixed(2);
   var totale = (Number(dati.importo) + Number(dati.impostaBollo || 0)).toFixed(2);

@@ -230,13 +230,15 @@ function proponiNuovoSocio(dati) {
 
   // Opzionale: Invia una mail allo Sponsor 2 per avvisarlo
   try {
-    MailApp.sendEmail({
-      to: dati.emailSponsor2,
-      subject: "Richiesta Sostegno Candidatura - Gens Ssshhh",
-      // Aggiornato il corpo della mail per mostrare Nome e Cognome insieme
-      htmlBody: "<p>Ciao, <b>" + dati.sponsor1 + "</b> ti ha indicato come secondo garante per l'ammissione di <b>" + dati.nomeCandidato + " " + dati.cognomeCandidato + "</b>.</p><p>Accedi al portale per confermare il tuo sostegno, in modo da poter portare la candidatura al voto in assemblea.</p>"
-    });
-    inviaNotificaPushUtente(dati.emailSponsor2, "Richiesta di sostegno", "Ti è stato richiesto di sostenere una candidatura.", "viewAdmin");
+    if (notificaAbilitata_(dati.emailSponsor2, "ammissione_sostegno", "email")) {
+      MailApp.sendEmail({
+        to: dati.emailSponsor2,
+        subject: "Richiesta Sostegno Candidatura - Gens Ssshhh",
+        // Aggiornato il corpo della mail per mostrare Nome e Cognome insieme
+        htmlBody: "<p>Ciao, <b>" + dati.sponsor1 + "</b> ti ha indicato come secondo garante per l'ammissione di <b>" + dati.nomeCandidato + " " + dati.cognomeCandidato + "</b>.</p><p>Accedi al portale per confermare il tuo sostegno, in modo da poter portare la candidatura al voto in assemblea.</p>"
+      });
+    }
+    inviaNotificaPushUtente(dati.emailSponsor2, "Richiesta di sostegno", "Ti è stato richiesto di sostenere una candidatura.", "viewAdmin", "ammissione_sostegno");
   } catch (e) { }
 
   return "OK";
@@ -362,9 +364,10 @@ function richiediIscrizioneSocio(dati) {
   try {
     var membri = getListaSociPerSponsor();
     membri.forEach(function (socio) {
+      if (!notificaAbilitata_(socio.email, "ammissione_nuova_richiesta", "email")) return;
       MailApp.sendEmail(socio.email, "Nuova richiesta di iscrizione", nome + " " + cognome + " ha chiesto di diventare socio. Puoi esaminare e avvallare la candidatura nella sezione Consultazioni entro 3 giorni.");
     });
-    inviaNotificaPush("Nuova richiesta di iscrizione", "Una candidatura è in attesa di almeno due avvalli entro 3 giorni.", null, "viewElezioni");
+    inviaNotificaPush("Nuova richiesta di iscrizione", "Una candidatura è in attesa di almeno due avvalli entro 3 giorni.", null, "viewElezioni", "ammissione_nuova_richiesta");
   } catch (e) { }
 
   return { ok: true, richiestaId: richiestaId, votoPrevisto: votoPrevisto.toISOString() };
@@ -461,10 +464,11 @@ function processaScadenzeAmmissioni() {
     var membri = getListaSociPerSponsor();
     daNotificare.forEach(function (candidato) {
       membri.forEach(function (socio) {
+        if (!notificaAbilitata_(socio.email, "ammissione_voto_aperto", "email")) return;
         try { MailApp.sendEmail(socio.email, "Voto ammissione socio aperto", "È aperta la votazione sulla richiesta di iscrizione di " + candidato.nome + ". Accedi alla sezione Consultazioni per esprimere il tuo voto."); } catch (e) { }
       });
     });
-    inviaNotificaPush("Voto ammissione aperto", daNotificare.length === 1 ? "È aperta una nuova mozione di ammissione." : "Sono aperte nuove mozioni di ammissione.", null, "viewElezioni");
+    inviaNotificaPush("Voto ammissione aperto", daNotificare.length === 1 ? "È aperta una nuova mozione di ammissione." : "Sono aperte nuove mozioni di ammissione.", null, "viewElezioni", "ammissione_voto_aperto");
   }
   return daNotificare.length;
 }

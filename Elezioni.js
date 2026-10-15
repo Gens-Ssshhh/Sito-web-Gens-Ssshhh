@@ -139,12 +139,14 @@ function riceviVotoCampagna(datiVoto) {
   // 5. Invio email di conferma (fuori dal lock per velocità)
   if (esito === "SUCCESS") {
     try {
-      MailApp.sendEmail({
-        to: emailChiara,
-        subject: "✅ Conferma Registrazione Voto",
-        htmlBody: "<h3>Voto Registrato con Successo</h3><p>La tua preferenza è stata registrata in modo sicuro ed anonimo nel registro dei voti.</p>"
-      });
-      inviaNotificaPushUtente(emailChiara, "Voto registrato", "La tua preferenza è stata registrata correttamente.", "viewElezioni");
+      if (notificaAbilitata_(emailChiara, "voto_conferma", "email")) {
+        MailApp.sendEmail({
+          to: emailChiara,
+          subject: "✅ Conferma Registrazione Voto",
+          htmlBody: "<h3>Voto Registrato con Successo</h3><p>La tua preferenza è stata registrata in modo sicuro ed anonimo nel registro dei voti.</p>"
+        });
+      }
+      inviaNotificaPushUtente(emailChiara, "Voto registrato", "La tua preferenza è stata registrata correttamente.", "viewElezioni", "voto_conferma");
     } catch (e) {
       console.log("Errore invio mail conferma voto: " + e);
     }
@@ -369,6 +371,8 @@ function _inviaBatchEmailElettorali(bccList, subject, testoMessaggio, urlWebApp,
   var adminEmail = Session.getActiveUser().getEmail(); // Recupera la tua email di amministratore
   var inviatiConSuccesso = []; // Contenitore per la ricevuta
   var batchSize = 40;
+  var destinatariPush = filtraDestinatariNotifica_(bccList, "promemoria_elettorale", "app");
+  bccList = filtraDestinatariNotifica_(bccList, "promemoria_elettorale", "email");
 
   // 1. CICLO DI INVIO AI SOCI
   for (var k = 0; k < bccList.length; k += batchSize) {
@@ -389,14 +393,15 @@ function _inviaBatchEmailElettorali(bccList, subject, testoMessaggio, urlWebApp,
     try {
       MailApp.sendEmail(opzioniMail);
       inviatiConSuccesso = inviatiConSuccesso.concat(batch); // Salva i nomi per la ricevuta
-      batch.forEach(function (email) {
-        inviaNotificaPushUtente(email, subject, "Hai ricevuto un nuovo promemoria elettorale.", "viewElezioni");
-      });
       Utilities.sleep(1000); 
     } catch (e) {
       console.log("Errore invio batch promemoria: " + e.toString());
     }
   }
+
+  destinatariPush.forEach(function (email) {
+    inviaNotificaPushUtente(email, subject, "Hai ricevuto un nuovo promemoria elettorale.", "viewElezioni");
+  });
 
   // 2. INVIO DELLA RICEVUTA DI SICUREZZA ALL'AMMINISTRATORE
   if (inviatiConSuccesso.length > 0) {
@@ -416,13 +421,15 @@ function _inviaBatchEmailElettorali(bccList, subject, testoMessaggio, urlWebApp,
     `;
     
     try {
-      MailApp.sendEmail({
-        to: adminEmail,
-        subject: subjectRicevuta,
-        htmlBody: testoRicevuta,
-        name: "Sistema Gestionale Gens Ssshhh"
-      });
-      inviaNotificaPushUtente(adminEmail, "Report invio elettorale", "Il sistema ha completato l'invio delle comunicazioni.", "viewAdmin");
+      if (notificaAbilitata_(adminEmail, "report_elettorale", "email")) {
+        MailApp.sendEmail({
+          to: adminEmail,
+          subject: subjectRicevuta,
+          htmlBody: testoRicevuta,
+          name: "Sistema Gestionale Gens Ssshhh"
+        });
+      }
+      inviaNotificaPushUtente(adminEmail, "Report invio elettorale", "Il sistema ha completato l'invio delle comunicazioni.", "viewAdmin", "report_elettorale");
     } catch (e) {
       console.log("Errore invio ricevuta log: " + e.toString());
     }

@@ -22,7 +22,7 @@ function requestSignOTP(email, docId) {
               "<p>Inserisci questo codice per firmare digitalmente il documento.</p>" +
               "<p><small>Il codice scade tra 5 minuti.</small></p>"
   });
-  if (typeof inviaNotificaPushUtente === "function") inviaNotificaPushUtente(email, "Codice per firma digitale", "Il tuo codice OTP è " + otp + ". Scade tra 5 minuti.", "viewFirma");
+  if (typeof inviaNotificaPushUtente === "function") inviaNotificaPushUtente(email, "Codice per firma digitale", "Il tuo codice OTP è " + otp + ". Scade tra 5 minuti.", "viewFirma", "firma_otp");
 
   return "OTP_SENT";
 }
@@ -73,13 +73,15 @@ function verifyAndSign(email, inputOtp, browserInfo) {
   var certificatoBlob = generaCertificatoFirma(email, file.getName(), docHashHex, signatureHex, idTransazione, timestamp);
   
   // Invia il certificato via mail
-  MailApp.sendEmail({
-    to: email,
-    subject: "✅ Documento Firmato: " + file.getName(),
-    htmlBody: "Hai firmato correttamente. In allegato trovi il certificato di firma con i dati crittografici.",
-    attachments: [certificatoBlob]
-  });
-  if (typeof inviaNotificaPushUtente === "function") inviaNotificaPushUtente(email, "Documento firmato", "Hai firmato correttamente il documento.", "viewFirma");
+  if (notificaAbilitata_(email, "firma_completata", "email")) {
+    MailApp.sendEmail({
+      to: email,
+      subject: "✅ Documento Firmato: " + file.getName(),
+      htmlBody: "Hai firmato correttamente. In allegato trovi il certificato di firma con i dati crittografici.",
+      attachments: [certificatoBlob]
+    });
+  }
+  if (typeof inviaNotificaPushUtente === "function") inviaNotificaPushUtente(email, "Documento firmato", "Hai firmato correttamente il documento.", "viewFirma", "firma_completata");
 
   // Pulisce la cache (OTP bruciato)
   cache.remove("SIGN_OTP_" + email);

@@ -595,6 +595,10 @@
                                         </div>
                                     </div>
                                 </div>
+                                <label class="calendar-notification-option">
+                                    <input type="checkbox" id="eventoNotificaSoci" checked>
+                                    <span>Invia una notifica ai soci per il nuovo sondaggio</span>
+                                </label>
                                 <button class="calendar-submit-proposal" onclick="inviaPropostaEvento()">
                                     Invia proposta <span aria-hidden="true">→</span>
                                 </button>
@@ -1554,6 +1558,26 @@
                                 <input id="configPushToggle" type="checkbox"
                                     onchange="impostaNotifichePush(this.checked)">
                             </label>
+                        </section>
+
+                        <section class="calendar-panel config-panel config-notification-center">
+                            <div class="calendar-header-row">
+                                <div><span class="section-kicker">Preferenze</span>
+                                    <h3>Centro notifiche</h3>
+                                </div>
+                            </div>
+                            <p class="config-panel-copy">Scegli per ogni notifica se riceverla via e-mail, nell’app
+                                (notifiche push e pannello avvisi) o in entrambi i modi. Per impostazione predefinita
+                                è tutto attivo. Le comunicazioni di sicurezza sono sempre inviate via e-mail.</p>
+                            <div class="notification-prefs-toolbar">
+                                <button type="button" class="btn-secondary config-action"
+                                    onclick="ripristinaPreferenzeNotificheUtente()">Ripristina predefinite</button>
+                                <span id="notificationPrefsStatus" class="config-status-message" role="status"
+                                    aria-live="polite"></span>
+                            </div>
+                            <div id="notificationPrefsList" class="notification-prefs-list">
+                                <p class="notification-empty">Caricamento preferenze…</p>
+                            </div>
                         </section>
 
                         <section class="calendar-panel config-panel config-account-actions">

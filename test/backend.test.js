@@ -7,6 +7,9 @@ const vm = require('node:vm');
 const root = path.resolve(__dirname, '..');
 
 function loadScript(file, sandbox) {
+  if (file !== 'NotificationPrefs.js' && typeof sandbox.notificaAbilitata_ !== 'function') {
+    loadScript('NotificationPrefs.js', sandbox);
+  }
   const source = fs.readFileSync(path.join(root, file), 'utf8');
   vm.runInNewContext(source, sandbox, { filename: file });
   return sandbox;
@@ -537,6 +540,37 @@ test('eventi: alla pubblicazione avvisa i soci attivi e installa un solo trigger
   assert.equal(triggerList.length, 1);
 });
 
+test('eventi: consente di pubblicare il sondaggio senza notificare i soci', () => {
+  const sociSheet = dataSheet([
+    ['Nome', 'Password', 'Email', 'Stato Socio'],
+    ['Mario', 'hash', 'mario@example.it', 'ATTIVO'],
+    ['Anna', 'hash', 'anna@example.it', 'ATTIVO']
+  ]);
+  const eventiRows = [['ID', 'CreatoIl', 'CreatoreEmail', 'Titolo', 'Descrizione', 'OpzioniJson', 'VotiJson', 'Stato']];
+  const eventiSheet = dataSheet(eventiRows);
+  const emails = [];
+  const pushes = [];
+  const context = {
+    SpreadsheetApp: { getActiveSpreadsheet: () => ({ getSheetByName: name => name === 'soci' ? sociSheet : name === 'ProposteEventi' ? eventiSheet : null }) },
+    Utilities: { getUuid: () => 'evento-senza-notifica' },
+    verificaLogin: () => 'OK_LOGIN',
+    MailApp: { sendEmail: message => emails.push(message) },
+    inviaNotificaPush: (...args) => pushes.push(args)
+  };
+  loadScript('Eventi.js', context);
+
+  const risultato = context.creaPropostaEvento('mario@example.it', 'pw', {
+    titolo: 'Cena sociale',
+    opzioni: [{ data: '10/11/2026', ora: '20:00' }],
+    inviaNotifica: false
+  });
+
+  assert.equal(risultato.ok, true);
+  assert.equal(eventiRows[1][11], false);
+  assert.equal(emails.length, 0);
+  assert.equal(pushes.length, 0);
+});
+
 test('eventi: dopo 72 ore ricorda solo i soci senza voto una sola volta', () => {
   const sociSheet = dataSheet([
     ['Nome', 'Password', 'Email', 'Stato Socio'],
@@ -549,8 +583,9 @@ test('eventi: dopo 72 ore ricorda solo i soci senza voto una sola volta', () => 
     _votanti: { 'socio:mario@example.it': { interesse: 'si', opzioni: [0], email: 'mario@example.it' } }
   };
   const eventiRows = [
-    ['ID', 'CreatoIl', 'CreatoreEmail', 'Titolo', 'Descrizione', 'OpzioniJson', 'VotiJson', 'Stato', 'EventoCalendarId', 'OpzioneConfermataJson', 'PromemoriaNonVotantiInviatoIl'],
-    ['evento-reminder', new Date(Date.now() - 4 * 86400000), 'mario@example.it', 'Cena sociale', '', '[{"data":"10/11/2026","ora":"20:00"}]', JSON.stringify(votes), 'ATTIVA', '', '', '']
+    ['ID', 'CreatoIl', 'CreatoreEmail', 'Titolo', 'Descrizione', 'OpzioniJson', 'VotiJson', 'Stato', 'EventoCalendarId', 'OpzioneConfermataJson', 'PromemoriaNonVotantiInviatoIl', 'NotificaSoci'],
+    ['evento-reminder', new Date(Date.now() - 4 * 86400000), 'mario@example.it', 'Cena sociale', '', '[{"data":"10/11/2026","ora":"20:00"}]', JSON.stringify(votes), 'ATTIVA', '', '', '', true],
+    ['evento-reminder-opt-out', new Date(Date.now() - 4 * 86400000), 'mario@example.it', 'Cena senza avviso', '', '[{"data":"11/11/2026","ora":"20:00"}]', '{}', 'ATTIVA', '', '', '', false]
   ];
   const eventiSheet = dataSheet(eventiRows);
   eventiSheet.getRange = (row, column) => ({ setValue: value => { eventiRows[row - 1][column - 1] = value; } });
@@ -578,7 +613,8 @@ test('notifiche: mostra avviso evento subito e promemoria dopo 72 ore finché no
   ]);
   const eventiRows = [
     ['ID', 'CreatoIl', 'CreatoreEmail', 'Titolo', 'Descrizione', 'OpzioniJson', 'VotiJson', 'Stato'],
-    ['evento-in-app', new Date(Date.now() - 4 * 86400000), 'anna@example.it', 'Cena sociale', '', '[{"data":"10/11/2026","ora":"20:00"}]', '{}', 'ATTIVA']
+    ['evento-in-app', new Date(Date.now() - 4 * 86400000), 'anna@example.it', 'Cena sociale', '', '[{"data":"10/11/2026","ora":"20:00"}]', '{}', 'ATTIVA', '', '', '', true],
+    ['evento-senza-notifica', new Date(Date.now() - 4 * 86400000), 'anna@example.it', 'Evento senza avviso', '', '[{"data":"11/11/2026","ora":"20:00"}]', '{}', 'ATTIVA', '', '', '', false]
   ];
   const eventiSheet = dataSheet(eventiRows);
   const context = {
@@ -591,6 +627,7 @@ test('notifiche: mostra avviso evento subito e promemoria dopo 72 ore finché no
   const aperte = context.getNotificheUtente('mario@example.it');
   assert.ok(aperte.some(notifica => notifica.titolo === 'Nuovo questionario evento' && notifica.viewId === 'viewCalendario'));
   assert.ok(aperte.some(notifica => notifica.titolo === 'Promemoria questionario evento'));
+  assert.equal(aperte.some(notifica => notifica.testo.includes('Evento senza avviso')), false);
 
   eventiRows[1][6] = JSON.stringify({ _votanti: { 'socio:mario@example.it': { interesse: 'no', opzioni: [], email: 'mario@example.it' } } });
   const dopoVoto = context.getNotificheUtente('mario@example.it');
@@ -1520,6 +1557,46 @@ test('firme: invia OTP e lega il codice al documento richiesto', () => {
   assert.equal(cacheValues.get('SIGN_OTP_mario@example.it').ttl, 300);
   assert.equal(cacheValues.get('SIGN_DOC_mario@example.it').value, 'doc-123');
   assert.equal(emailSent.to, 'mario@example.it');
+});
+
+test('centro notifiche: tutto attivo di default, preferenze per canale e canali obbligatori', () => {
+  const properties = new Map();
+  const context = {
+    getDatiUtente: email => ({ email, ruolo: 'Socio' }),
+    isRuoloAmministrativo: () => false,
+    PropertiesService: {
+      getScriptProperties: () => ({
+        getProperty: key => properties.get(key) || null,
+        setProperty: (key, value) => properties.set(key, value),
+        deleteProperty: key => properties.delete(key)
+      })
+    }
+  };
+  loadScript('NotificationPrefs.js', context);
+
+  assert.equal(context.notificaAbilitata_('mario@example.it', 'evento_nuovo', 'email'), true);
+  assert.equal(context.notificaAbilitata_('mario@example.it', 'evento_nuovo', 'app'), true);
+
+  const salvate = context.salvaPreferenzeNotifiche({
+    email: 'Mario@Example.it',
+    preferenze: {
+      evento_nuovo: { email: false },
+      firma_otp: { email: false },
+      fattura_ricevuta: { app: false },
+      inesistente: { email: false }
+    }
+  });
+  assert.equal(salvate.ok, true);
+  assert.equal(context.notificaAbilitata_('mario@example.it', 'evento_nuovo', 'email'), false);
+  assert.equal(context.notificaAbilitata_('mario@example.it', 'evento_nuovo', 'app'), true);
+  assert.equal(context.notificaAbilitata_('mario@example.it', 'firma_otp', 'email'), true);
+  assert.equal(context.notificaAbilitata_('mario@example.it', 'fattura_ricevuta', 'app'), false);
+  assert.equal(context.notificaAbilitata_('anna@example.it', 'evento_nuovo', 'email'), true);
+  assert.deepEqual(Array.from(context.filtraDestinatariNotifica_(['mario@example.it', 'anna@example.it'], 'evento_nuovo', 'email')), ['anna@example.it']);
+  assert.equal(salvate.notifiche.some(voce => voce.soloAdmin), false);
+
+  context.salvaPreferenzeNotifiche({ email: 'mario@example.it', preferenze: { evento_nuovo: { email: true } } });
+  assert.equal(properties.has('NOTIFICHE_PREF|mario@example.it'), false);
 });
 
 test('documenti: elenca categorie e carica un file nella cartella pubblica', () => {

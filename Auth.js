@@ -111,7 +111,7 @@ function eseguiResetPassword(emailInput) {
       foglioSoci.getRange(i + 1, 2).setValue(creaHash(passTemp));
       try {
         MailApp.sendEmail(emailTarget, "Nuova Password", "Password: " + passTemp);
-        inviaNotificaPushUtente(emailTarget, "Nuova password", "La tua password temporanea è stata generata.", "viewProf");
+        inviaNotificaPushUtente(emailTarget, "Nuova password", "La tua password temporanea è stata generata.", "viewProf", "password_temporanea");
         return "RESET_OK";
       } catch (e) { }
     }
@@ -154,7 +154,7 @@ function inviaLinkReset(email, attivazioneIniziale) {
             "<p><a href='" + link + "' style='background:#3b82f6; color:white; padding:10px 20px; text-decoration:none; border-radius:5px;'>" + (attivazioneIniziale ? "IMPOSTA LA PASSWORD" : "IMPOSTA NUOVA PASSWORD") + "</a></p>" +
             "<p><small>Se non sei stato tu, ignora questa mail. Il link scade tra 1 ora.</small></p>"
         });
-        if (!attivazioneIniziale) inviaNotificaPushUtente(emailTarget, "Reimpostazione password", "È disponibile il link per reimpostare la password.", "viewProf");
+        if (!attivazioneIniziale) inviaNotificaPushUtente(emailTarget, "Reimpostazione password", "È disponibile il link per reimpostare la password.", "viewProf", "reset_password");
         return "LINK_INVIATO";
       } catch (e) { return "ERRORE_MAIL"; }
     }
@@ -329,8 +329,10 @@ function inviaRichiestaDimissioni(dati) {
   var ss = SpreadsheetApp.getActiveSpreadsheet();
   var emailAdmin = ss.getSheetByName("Config").getRange("B19").getValue() || "gens.ssshhh@gmail.com";
   try {
-    MailApp.sendEmail(emailAdmin, "⚠️ Richiesta Dimissioni", "Il socio " + nomeCompleto + " (" + emailUtente + ") ha richiesto le dimissioni.");
-    inviaNotificaPushUtente(emailAdmin, "Richiesta dimissioni", "" + nomeCompleto + " ha richiesto le dimissioni.", "viewAdmin");
+    if (notificaAbilitata_(emailAdmin, "dimissioni_richiesta", "email")) {
+      MailApp.sendEmail(emailAdmin, "⚠️ Richiesta Dimissioni", "Il socio " + nomeCompleto + " (" + emailUtente + ") ha richiesto le dimissioni.");
+    }
+    inviaNotificaPushUtente(emailAdmin, "Richiesta dimissioni", "" + nomeCompleto + " ha richiesto le dimissioni.", "viewAdmin", "dimissioni_richiesta");
     return "DIMISSIONI_OK";
   } catch (e) { return "ERRORE_MAIL"; }
 }
@@ -446,14 +448,16 @@ function inviaAvvisiScadenzaTessere() {
 
     try {
       // Usiamo il formato avanzato di MailApp per inviare l'HTML e impostare il mittente ufficiale
-      MailApp.sendEmail({
-        to: email,
-        subject: oggetto,
-        body: testoPlain,
-        htmlBody: htmlBody,
-        name: "Gens Ssshhh App"
-      });
-      inviaNotificaPushUtente(email, titoloEmail, testoIntro.replace(/<[^>]*>?/gm, ''), "viewProf");
+      if (notificaAbilitata_(email, "tessera_scadenza", "email")) {
+        MailApp.sendEmail({
+          to: email,
+          subject: oggetto,
+          body: testoPlain,
+          htmlBody: htmlBody,
+          name: "Gens Ssshhh App"
+        });
+      }
+      inviaNotificaPushUtente(email, titoloEmail, testoIntro.replace(/<[^>]*>?/gm, ''), "viewProf", "tessera_scadenza");
 
       proprieta.setProperty(chiave, new Date().toISOString());
       scriviLog(email, "EMAIL_TESSERA_" + tipo, "Scadenza " + dataFormattata);
@@ -521,7 +525,7 @@ function getNotificheUtente(email) {
   var utente = getDatiUtente(email);
   if (!utente) return notifiche;
 
-  var scadenza = parseDataNotifica(utente.scadenza);
+  var scadenza = notificaAbilitata_(email, "tessera_scadenza", "app") ? parseDataNotifica(utente.scadenza) : null;
   if (scadenza) {
     var giorni = Math.ceil((scadenza.getTime() - new Date().getTime()) / 86400000);
     if (giorni < 0) {
@@ -532,13 +536,13 @@ function getNotificheUtente(email) {
   }
 
   try {
-    getAvvisiPubblici().slice(0, 5).forEach(function (avviso) {
+    if (notificaAbilitata_(email, "news_pubblicate", "app")) getAvvisiPubblici().slice(0, 5).forEach(function (avviso) {
       notifiche.push({ tipo: "info", titolo: avviso.titolo, testo: avviso.testo, data: avviso.data });
     });
   } catch (e) { }
 
   try {
-    if (typeof getRichiesteFirmaUtente === "function") {
+    if (typeof getRichiesteFirmaUtente === "function" && notificaAbilitata_(email, "firma_richiesta", "app")) {
       var firme = getRichiesteFirmaUtente(email) || [];
       firme.filter(function (firma) { return String(firma.stato || "").toUpperCase().indexOf("FIRM") < 0; }).slice(0, 5).forEach(function (firma) {
         notifiche.push({ tipo: "action", titolo: "Documento da firmare", testo: firma.nomeFile || "Hai un documento in attesa di firma." });
@@ -547,7 +551,7 @@ function getNotificheUtente(email) {
   } catch (e) { }
 
   try {
-    if (typeof getConsultazioniAttiveUtente === "function") {
+    if (typeof getConsultazioniAttiveUtente === "function" && notificaAbilitata_(email, "consultazione_aperta", "app")) {
       var consultazioni = getConsultazioniAttiveUtente(email) || [];
       consultazioni.slice(0, 5).forEach(function (consultazione) {
         notifiche.push({ tipo: "action", titolo: "Consultazione aperta", testo: consultazione.titolo || "Hai una consultazione a cui partecipare." });
@@ -556,7 +560,7 @@ function getNotificheUtente(email) {
   } catch (e) { }
 
   try {
-    if (typeof getElezioniPerCandidatura === "function") {
+    if (typeof getElezioniPerCandidatura === "function" && notificaAbilitata_(email, "candidature_aperte", "app")) {
       var candidature = getElezioniPerCandidatura(email) || [];
       candidature.slice(0, 5).forEach(function (candidatura) {
         notifiche.push({ tipo: "action", titolo: "Candidature aperte", testo: candidatura.titolo || "È possibile presentare una candidatura." });
@@ -570,6 +574,7 @@ function getNotificheUtente(email) {
       (getProposteEventi(email) || []).forEach(function (proposta) {
         var titoloEvento = String(proposta.titolo || "Evento proposto");
         if (proposta.ricompilazioneRichiesta) {
+          if (!notificaAbilitata_(email, "evento_ricompila", "app")) return;
           notifiche.push({
             tipo: "action",
             titolo: "Ricompila il questionario evento",
@@ -578,16 +583,19 @@ function getNotificheUtente(email) {
           });
           return;
         }
+        if (proposta.notificaSoci === false) return;
         if (proposta.mioVoto) return;
         var creataIl = proposta.creataIl ? new Date(proposta.creataIl) : null;
         var passate72Ore = creataIl && !isNaN(creataIl.getTime()) && adesso.getTime() - creataIl.getTime() >= 3 * 86400000;
-        notifiche.push({
-          tipo: "action",
-          titolo: "Nuovo questionario evento",
-          testo: "È aperto il questionario per " + titoloEvento + ". Esprimi la tua risposta.",
-          viewId: "viewCalendario"
-        });
-        if (passate72Ore) {
+        if (notificaAbilitata_(email, "evento_nuovo", "app")) {
+          notifiche.push({
+            tipo: "action",
+            titolo: "Nuovo questionario evento",
+            testo: "È aperto il questionario per " + titoloEvento + ". Esprimi la tua risposta.",
+            viewId: "viewCalendario"
+          });
+        }
+        if (passate72Ore && notificaAbilitata_(email, "evento_promemoria", "app")) {
           notifiche.push({
             tipo: "warning",
             titolo: "Promemoria questionario evento",
@@ -766,4 +774,3 @@ function getStartData(email) {
   cache.put(cacheKey, JSON.stringify(result), 30);
   return result;
 }
-

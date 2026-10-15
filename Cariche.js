@@ -58,6 +58,7 @@ function inviaNotificaCambioCarica_(socio, caricaPrecedente, caricaNuova, righeS
 
   Object.keys(destinatari).forEach(function (chiave) {
     var destinatario = destinatari[chiave];
+    if (!notificaAbilitata_(destinatario.email, "carica_cambio", "email")) return;
     var corpo;
     if (destinatario.titolareEsistente) {
       corpo = "Ciao " + destinatario.nome + ",\n\n" +

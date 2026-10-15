@@ -36,8 +36,8 @@ var AZIONI_API_CONSENTITE = [
   "getDashboardAdmin", "getDatiBilancio", "getDatiBilancioCompleto", "getDatiUtente",
   "getElezioniPerCandidatura", "getGruppiSpese", "getListaDocumenti", "getListaFornitori",
   "getListaSociPerSponsor", "getNomiSociAttivi", "getNotificheUtente",
-  "getPianoDeiContiDinamico", "getPropostaEventoPubblica", "getProposteEventi",
-  "getReportStorici", "getRichiesteFirmaUtente", "getRichiesteIscrizioneDaAvvallare",
+  "getPianoDeiContiDinamico", "getPreferenzeNotifiche", "getPropostaEventoPubblica", "getProposteEventi",
+  "getReportStorici", "ripristinaPreferenzeNotifiche", "salvaPreferenzeNotifiche", "getRichiesteFirmaUtente", "getRichiesteIscrizioneDaAvvallare",
   "getRispostaRicompilazioneOspite", "getRisultatiLive", "getSociPerFattura",
   "getStartData", "getStoricoFirmeUtente", "inviaCandidatura", "inviaLinkReset",
   "inviaRichiestaDimissioni", "login", "logout", "modificaPropostaEvento",
@@ -214,8 +214,11 @@ function doPost(e) {
     }
 
     // Sensitive identity parameters must always come from the validated session.
-    if (azione === "getDatiUtente" || azione === "getDashboardAdmin") {
+    if (azione === "getDatiUtente" || azione === "getDashboardAdmin" || azione === "getPreferenzeNotifiche" || azione === "ripristinaPreferenzeNotifiche") {
       richiesta.payload = emailSessione;
+    } else if (azione === "salvaPreferenzeNotifiche") {
+      var payloadPreferenze = richiesta.payload && typeof richiesta.payload === "object" ? richiesta.payload : {};
+      richiesta.payload = { email: emailSessione, preferenze: payloadPreferenze.preferenze };
     } else if (/^admin/i.test(azione || "") && richiesta.payload && typeof richiesta.payload === "object") {
       richiesta.payload = vincolaIdentitaAdmin_(richiesta.payload, emailSessione);
     }

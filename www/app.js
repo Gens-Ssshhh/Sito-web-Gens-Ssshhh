@@ -46,8 +46,6 @@ var configVoto = { mode: "", max: 1 };
 var pushNotificationsInitialized = false;
 var localNotificationsPlugin = null;
 var appUpdateChecked = false;
-var APP_UPDATE_CHECK_INTERVAL_MS = 7 * 24 * 60 * 60 * 1000;
-var APP_UPDATE_LAST_CHECK_KEY = 'gens_app_update_last_check';
 var APP_UPDATE_RELEASE_URL = 'https://Gens-Ssshhh.github.io/Sito-web-Gens-Ssshhh/release.json';
 var APP_UPDATE_DRIVE_FOLDER_URL = 'https://drive.google.com/drive/folders/1fnvFt3mddJ0LR-xn8_2QUGNvl_yNz';
 var bilancioRequestInFlight = null;
@@ -201,9 +199,6 @@ function controllaAggiornamentoApp() {
     appUpdateChecked = true;
 
     var now = Date.now();
-    var lastCheck = Number(localStorage.getItem(APP_UPDATE_LAST_CHECK_KEY) || 0);
-    if (lastCheck && now - lastCheck < APP_UPDATE_CHECK_INTERVAL_MS) return;
-
     var releaseUrl = APP_UPDATE_RELEASE_URL + '?ts=' + now;
     function leggiRelease(url) {
         return fetch(url, { cache: 'no-store' }).then(function (response) {
@@ -220,31 +215,34 @@ function controllaAggiornamentoApp() {
     ]).then(function (releases) {
         var installedRelease = Number(releases[0] && releases[0].releaseId);
         var availableRelease = Number(releases[1] && releases[1].releaseId);
-        if (!Number.isFinite(installedRelease) || !Number.isFinite(availableRelease)) {
+        if (!Number.isSafeInteger(installedRelease) || installedRelease <= 0 ||
+            !Number.isSafeInteger(availableRelease) || availableRelease <= 0) {
             throw new Error('Metadati di versione non validi in release.json.');
         }
-        localStorage.setItem(APP_UPDATE_LAST_CHECK_KEY, String(now));
-        if (!availableRelease || availableRelease <= installedRelease) return;
+        if (availableRelease <= installedRelease) return;
 
-        // Usa il link dell'APK se presente; altrimenti apre la cartella condivisa delle versioni.
         var metadata = releases[1];
         var downloadUrl = String(metadata.downloadUrl || metadata.apkUrl || metadata.driveFolderUrl || APP_UPDATE_DRIVE_FOLDER_URL).trim();
         if (!/^https:\/\//i.test(downloadUrl)) {
-            console.error('Link di download Google Drive mancante in release.json (downloadUrl).');
-            return;
+            throw new Error('Link Google Drive mancante o non valido in release.json.');
         }
 
-        // Trasforma i link di condivisione di un file Drive in link diretti al download.
-        var driveFileId = downloadUrl.match(/drive\.google\.com\/file\/d\/([^/?]+)/) || downloadUrl.match(/[?&]id=([^&]+)/);
-        if (driveFileId && downloadUrl.indexOf('drive.google.com') >= 0) {
-            downloadUrl = 'https://drive.google.com/uc?export=download&id=' + encodeURIComponent(driveFileId[1]);
+        var notice = document.getElementById('appUpdateNotice');
+        var versionLabel = document.getElementById('appUpdateVersion');
+        var driveLink = document.getElementById('appUpdateDriveLink');
+        if (!notice || !versionLabel || !driveLink) {
+            throw new Error('Avviso aggiornamento non presente nella pagina.');
         }
 
-        if (window.confirm('È disponibile una nuova versione dell’app. Vuoi aggiornarla ora?')) {
-            window.location.href = downloadUrl;
-        }
+        var availableVersion = String(metadata.version || metadata.releaseDate || metadata.releaseId).trim();
+        if (!availableVersion) throw new Error('Versione disponibile mancante in release.json.');
+
+        versionLabel.textContent = availableVersion;
+        driveLink.href = downloadUrl;
+        notice.classList.remove('hidden');
     }).catch(function (error) {
         console.error('Impossibile controllare gli aggiornamenti:', error);
+        showToast('Non è stato possibile verificare la disponibilità di aggiornamenti.', 'error');
     });
 }
 

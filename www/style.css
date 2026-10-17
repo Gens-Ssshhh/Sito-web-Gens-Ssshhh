@@ -3766,6 +3766,32 @@ textarea {
   transform: translate(-50%, 0);
 }
 
+.app-update-notice {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 18px;
+  padding: 14px 16px;
+  border: 1px solid rgba(197, 157, 75, 0.55);
+  border-radius: 14px;
+  background: #fff8e8;
+  color: var(--navy);
+  font-size: 14px;
+}
+
+.app-update-notice p {
+  margin: 0;
+}
+
+.app-update-notice a {
+  flex: 0 0 auto;
+  color: var(--navy);
+  font-weight: 700;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
 .retry-data-button {
   border: 1px solid rgba(197, 157, 75, 0.45);
   border-radius: 999px;

@@ -28,22 +28,6 @@ jobs:
       - name: Setup Pages
         uses: actions/configure-pages@v4
 
-      - name: Write release metadata
-        env:
-          TZ: 'Europe/Rome'
-        run: |
-          RELEASE_DATE=$(date +%Y-%m-%d)
-          RELEASE_ID=$(date +%Y%m%d)
-          cat > ./www/release.json <<EOF
-          {
-            "app": "Gens Ssshhh",
-            "version": "1.0.0",
-            "releaseDate": "${RELEASE_DATE}",
-            "releaseId": "${RELEASE_ID}",
-            "driveFolderUrl": "https://drive.google.com/drive/folders/1fnvFt3mddJ0LR-xn8_2QUGNvl_yNz"
-          }
-          EOF
-
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
         with:

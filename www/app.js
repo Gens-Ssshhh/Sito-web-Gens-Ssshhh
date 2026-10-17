@@ -38,6 +38,8 @@ const REQUEST_TIMEOUT_MS = 20000;
 var curEmail = "";
 var curPass = "";
 var authToken = localStorage.getItem('gens_session_token') || "";
+var BIOMETRIC_CREDENTIALS_KEY = 'gens_login_credentials';
+var BIOMETRIC_ENABLED_KEY = 'gens_biometric_enabled';
 var curDocMode = "PUBBLICO";
 var configVoto = { mode: "", max: 1 };
 var pushNotificationsInitialized = false;
@@ -50,6 +52,102 @@ var APP_UPDATE_DRIVE_FOLDER_URL = 'https://drive.google.com/drive/folders/1fnvFt
 var bilancioRequestInFlight = null;
 var bilancioCacheTimestamp = 0;
 var newsRequestInFlight = null;
+
+function getBiometricPlugins() {
+    var plugins = window.Capacitor && window.Capacitor.Plugins;
+    return {
+        auth: plugins && plugins.BiometricAuthNative,
+        storage: plugins && plugins.SecureStorage
+    };
+}
+
+async function verificaDisponibilitaBiometrica() {
+    if (!window.Capacitor || !window.Capacitor.getPlatform || window.Capacitor.getPlatform() !== 'android') return false;
+    var plugins = getBiometricPlugins();
+    if (!plugins.auth || !plugins.storage) return false;
+    try {
+        var result = await plugins.auth.checkBiometry();
+        return Boolean(result && result.strongBiometryIsAvailable);
+    } catch (error) {
+        console.error('Impossibile verificare la disponibilità biometrica:', error);
+        return false;
+    }
+}
+
+async function autenticaBiometria(motivo) {
+    var plugins = getBiometricPlugins();
+    if (!plugins.auth) throw new Error('Autenticazione biometrica non disponibile.');
+    await plugins.auth.authenticate({
+        reason: motivo,
+        cancelTitle: 'Annulla',
+        androidTitle: 'Gens Ssshhh',
+        androidSubtitle: motivo,
+        allowDeviceCredential: false,
+        androidBiometryStrength: 1
+    });
+}
+
+async function salvaCredenzialiAccesso(email, password) {
+    if (localStorage.getItem(BIOMETRIC_ENABLED_KEY) !== 'true') {
+        localStorage.setItem('gens_pass', password);
+        return '';
+    }
+
+    var plugins = getBiometricPlugins();
+    try {
+        if (!plugins.storage) throw new Error('Memoria sicura non disponibile.');
+        await plugins.storage.set(BIOMETRIC_CREDENTIALS_KEY, { email: email, password: password });
+        localStorage.removeItem('gens_pass');
+        return '';
+    } catch (error) {
+        console.error('Impossibile salvare le credenziali biometriche:', error);
+        if (plugins.storage) {
+            try {
+                await plugins.storage.remove(BIOMETRIC_CREDENTIALS_KEY);
+            } catch (removeError) {
+                console.error('Impossibile rimuovere le credenziali biometriche non aggiornate:', removeError);
+            }
+        }
+        localStorage.removeItem(BIOMETRIC_ENABLED_KEY);
+        localStorage.removeItem('gens_pass');
+        return 'Accesso biometrico disattivato: non è stato possibile aggiornare le credenziali protette. Al prossimo accesso inserisci la password.';
+    }
+}
+
+async function impostaAccessoBiometrico(abilitato) {
+    var toggle = document.getElementById('configBiometricToggle');
+    var status = document.getElementById('configBiometricStatus');
+    var plugins = getBiometricPlugins();
+    if (toggle) toggle.disabled = true;
+    if (status) status.innerText = abilitato ? 'Configurazione in corso…' : 'Disattivazione in corso…';
+
+    try {
+        if (abilitato) {
+            if (!(await verificaDisponibilitaBiometrica())) {
+                throw new Error('Serve un’impronta digitale configurata nell’app Android.');
+            }
+            if (!curEmail || !curPass) {
+                throw new Error('Accedi di nuovo con la password prima di attivare questa opzione.');
+            }
+            await autenticaBiometria('Conferma l’attivazione dell’accesso biometrico');
+            if (!plugins.storage) throw new Error('Memoria sicura non disponibile.');
+            await plugins.storage.set(BIOMETRIC_CREDENTIALS_KEY, { email: curEmail, password: curPass });
+            localStorage.removeItem('gens_pass');
+            localStorage.setItem(BIOMETRIC_ENABLED_KEY, 'true');
+            if (status) status.innerText = 'Attivo su questo dispositivo';
+        } else {
+            if (plugins.storage) await plugins.storage.remove(BIOMETRIC_CREDENTIALS_KEY);
+            localStorage.removeItem(BIOMETRIC_ENABLED_KEY);
+            if (status) status.innerText = 'Disattivato; al prossimo accesso usa la password';
+        }
+    } catch (error) {
+        console.error('Impossibile modificare l’accesso biometrico:', error);
+        if (toggle) toggle.checked = !abilitato;
+        if (status) status.innerText = error.message || 'Impossibile modificare l’accesso biometrico.';
+    } finally {
+        if (toggle) toggle.disabled = false;
+    }
+}
 
 function isRuoloAmministrativo(ruolo) {
     var ruoloNorm = String(ruolo || "").trim().toUpperCase().replace(/[\s-]/g, "");
@@ -671,6 +769,23 @@ function renderConfigurazioneView() {
             : 'Disponibili nell’app Android installata';
     }
 
+    var biometricToggle = document.getElementById('configBiometricToggle');
+    var biometricStatus = document.getElementById('configBiometricStatus');
+    if (biometricToggle) {
+        var biometricEnabled = localStorage.getItem(BIOMETRIC_ENABLED_KEY) === 'true';
+        biometricToggle.checked = biometricEnabled;
+        biometricToggle.disabled = true;
+        if (biometricStatus) biometricStatus.innerText = 'Controllo disponibilità…';
+        verificaDisponibilitaBiometrica().then(function (available) {
+            biometricToggle.disabled = false;
+            if (biometricStatus) {
+                biometricStatus.innerText = !available
+                    ? 'Disponibile solo nell’app Android con impronta configurata'
+                    : (biometricEnabled ? 'Attivo su questo dispositivo' : 'Disponibile su questo dispositivo');
+            }
+        });
+    }
+
     var passwordForm = document.getElementById('configPasswordForm');
     if (passwordForm && !passwordForm.dataset.handlerAttached) {
         passwordForm.dataset.handlerAttached = 'true';
@@ -784,9 +899,11 @@ async function salvaPasswordConfigurazione(event) {
     button.disabled = false;
     if (result === 'CAMBIO_OK') {
         curPass = newPass;
-        localStorage.setItem('gens_pass', newPass);
+        var biometricStorageWarning = await salvaCredenzialiAccesso(curEmail, newPass);
         form.reset();
-        message.textContent = 'Password aggiornata.';
+        message.textContent = biometricStorageWarning || 'Password aggiornata.';
+        var biometricToggle = document.getElementById('configBiometricToggle');
+        if (biometricToggle && biometricStorageWarning) biometricToggle.checked = false;
     } else if (result === 'ERRORE_CREDENZIALI') {
         message.textContent = 'La password attuale non è corretta.';
     } else if (result) {
@@ -1001,9 +1118,9 @@ async function chiamaServer(nomeAzione, parametri = {}, propagaErrore = false, t
 }
 
 /* --- LOGIN LOGIC CON SALVATAGGIO SESSIONE --- */
-async function faiLogin() {
-    var e = document.getElementById('logEmail').value;
-    var p = document.getElementById('logPass').value;
+async function faiLogin(emailOverride, passwordOverride) {
+    var e = emailOverride || document.getElementById('logEmail').value;
+    var p = passwordOverride || document.getElementById('logPass').value;
     var msg = document.getElementById('loginMsg');
     var loginButton = document.getElementById('loginButton');
 
@@ -1049,14 +1166,15 @@ async function faiLogin() {
             authToken = risultato.token;
 
             localStorage.setItem('gens_email', e);
-            localStorage.setItem('gens_pass', p);
             localStorage.setItem('gens_session_token', authToken);
+            var biometricStorageWarning = await salvaCredenzialiAccesso(e, p);
 
             document.getElementById('viewLogin').classList.add('hidden');
 
             // Momentaneamente disabilitiamo la verifica consenso per testare l'app nuda e cruda
             document.getElementById('appInterface').classList.remove('hidden');
             initApp();
+            if (biometricStorageWarning) showToast(biometricStorageWarning, 'error');
 
         } else {
             msg.innerText = risultato.messaggio || "Il server non ha creato una sessione valida.";
@@ -1080,6 +1198,33 @@ async function faiLogin() {
             loginButton.disabled = false;
             loginButton.classList.remove('is-loading');
         }
+    }
+}
+
+async function accediConImpronta() {
+    var button = document.getElementById('biometricLoginButton');
+    var msg = document.getElementById('loginMsg');
+    if (button) button.disabled = true;
+    msg.innerText = 'Conferma l’accesso con l’impronta digitale…';
+    msg.style.color = '#2563eb';
+
+    try {
+        if (!(await verificaDisponibilitaBiometrica())) {
+            throw new Error('Impronta digitale non disponibile su questo dispositivo.');
+        }
+        await autenticaBiometria('Conferma l’accesso a Gens Ssshhh');
+        var plugins = getBiometricPlugins();
+        var credentials = await plugins.storage.get(BIOMETRIC_CREDENTIALS_KEY);
+        if (!credentials || typeof credentials.email !== 'string' || typeof credentials.password !== 'string') {
+            throw new Error('Credenziali biometriche non trovate. Accedi con la password per configurarle di nuovo.');
+        }
+        await faiLogin(credentials.email, credentials.password);
+    } catch (error) {
+        console.error('Accesso biometrico non riuscito:', error);
+        msg.innerText = error.message || 'Accesso biometrico non riuscito. Accedi con la password.';
+        msg.style.color = 'red';
+    } finally {
+        if (button) button.disabled = false;
     }
 }
 
@@ -2076,7 +2221,7 @@ function salvaModificheSocioAdmin() {
 
 
 /* --- AUTO START E GESTIONE SESSIONE --- */
-window.onload = function () {
+window.onload = async function () {
     aggiornaStatoRete();
     if (new URLSearchParams(window.location.search).get('iscrizione') === '1') {
         document.getElementById('viewLogin').classList.add('hidden');
@@ -2093,6 +2238,21 @@ window.onload = function () {
 
     // 1. Intercetta il token prima dell'autologin e mostra solo il reset.
     if (gestisciTokenReset()) return;
+
+    if (localStorage.getItem(BIOMETRIC_ENABLED_KEY) === 'true') {
+        var biometricButton = document.getElementById('biometricLoginButton');
+        var biometricMessage = document.getElementById('loginMsg');
+        var biometricAvailable = await verificaDisponibilitaBiometrica();
+        if (biometricAvailable) {
+            if (biometricButton) biometricButton.classList.remove('hidden');
+            biometricMessage.innerText = 'Accedi con impronta digitale oppure usa la password.';
+            biometricMessage.style.color = '#2563eb';
+        } else {
+            biometricMessage.innerText = 'Impronta non disponibile. Accedi con la password.';
+            biometricMessage.style.color = '#ef4444';
+        }
+        return;
+    }
 
     // 2. Controllo Auto-Login (Ricorda utente)
     var savedEmail = localStorage.getItem('gens_email');

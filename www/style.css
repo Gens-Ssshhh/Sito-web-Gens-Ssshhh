@@ -3202,6 +3202,13 @@ textarea {
   margin: 0;
 }
 
+#viewLogin .auth-biometrics-btn {
+  display: block;
+  width: min(100%, 340px);
+  min-height: 48px;
+  margin: 12px 0 0;
+}
+
 #viewLogin .auth-signup-btn {
   text-decoration: none;
   box-shadow: none;

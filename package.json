@@ -11,9 +11,11 @@
   "license": "ISC",
   "type": "commonjs",
   "dependencies": {
+    "@aparajita/capacitor-biometric-auth": "^10.0.0",
+    "@aparajita/capacitor-secure-storage": "^8.0.1",
     "@capacitor/android": "^8.5.1",
-    "@capacitor/local-notifications": "^8.1.2",
     "@capacitor/core": "^8.5.1",
+    "@capacitor/local-notifications": "^8.1.2",
     "@capacitor/push-notifications": "^8.1.2"
   },
   "devDependencies": {

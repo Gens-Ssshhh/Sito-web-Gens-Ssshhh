@@ -16,7 +16,7 @@ function autorizzaDriveVerbali() {
 
 var SECRET_SALT = "INCULATI-BRUTTO-GAYNEU37Y";
 var SESSION_CACHE_PREFIX = "gens_session_";
-var SESSION_TTL_SECONDS = 21600;
+var SESSION_TTL_SECONDS = 15552000;
 var AZIONI_API_CONSENTITE = [
   "adminCambiaStatoVoto", "adminCancellaNews", "adminChiudiEGeneraRegistroFirme",
   "adminChiudiEGeneraVerbale", "adminCreaNuovaElezioneAvanzata", "adminEliminaElezione",
@@ -52,22 +52,39 @@ var AZIONI_API_CONSENTITE = [
 
 function creaSessione_(email) {
   var token = Utilities.getUuid();
-  CacheService.getScriptCache().put(
+  PropertiesService.getScriptProperties().setProperty(
     SESSION_CACHE_PREFIX + token,
-    String(email || "").trim().toLowerCase(),
-    SESSION_TTL_SECONDS
+    JSON.stringify({
+      email: String(email || "").trim().toLowerCase(),
+      expiresAt: Date.now() + SESSION_TTL_SECONDS * 1000
+    })
   );
   return token;
 }
 
 function getEmailSessione_(token) {
   if (typeof token !== "string" || !token || token.length > 200) return "";
-  return CacheService.getScriptCache().get(SESSION_CACHE_PREFIX + token) || "";
+  var chiave = SESSION_CACHE_PREFIX + token;
+  var proprieta = PropertiesService.getScriptProperties();
+  var sessione = proprieta.getProperty(chiave);
+  if (!sessione) return "";
+  try {
+    var datiSessione = JSON.parse(sessione);
+    if (!datiSessione.email || !datiSessione.expiresAt || Date.now() >= datiSessione.expiresAt) {
+      proprieta.deleteProperty(chiave);
+      return "";
+    }
+    return datiSessione.email;
+  } catch (err) {
+    proprieta.deleteProperty(chiave);
+    return "";
+  }
 }
 
 function revocaSessione_(token) {
   if (typeof token === "string" && token && token.length <= 200) {
     CacheService.getScriptCache().remove(SESSION_CACHE_PREFIX + token);
+    PropertiesService.getScriptProperties().deleteProperty(SESSION_CACHE_PREFIX + token);
   }
 }
 

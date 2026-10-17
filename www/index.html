@@ -62,6 +62,8 @@
                         href="https://Gens-Ssshhh.github.io/Sito-web-Gens-Ssshhh/index.html?iscrizione=1"
                         target="_blank" rel="noopener noreferrer">ISCRIVITI</a>
                 </div>
+                <button id="biometricLoginButton" type="button" class="btn-secondary auth-biometrics-btn hidden"
+                    onclick="accediConImpronta()">Accedi con impronta digitale</button>
 
                 <div id="loginMsg" style="margin-top:15px; font-size:13px; min-height:18px;"></div>
 
@@ -1542,6 +1544,22 @@
                                 <p id="configPasswordMessage" class="config-status-message" role="status"
                                     aria-live="polite"></p>
                             </form>
+                        </section>
+
+                        <section class="calendar-panel config-panel">
+                            <div class="calendar-header-row">
+                                <div><span class="section-kicker">Dispositivo</span>
+                                    <h3>Accesso biometrico</h3>
+                                </div>
+                            </div>
+                            <p class="config-panel-copy">Attiva l’accesso con impronta digitale su questo dispositivo.
+                                Potrai sempre accedere anche con la password.</p>
+                            <label class="config-toggle-row">
+                                <span><strong>Usa l’impronta per accedere</strong><small
+                                        id="configBiometricStatus">Verifica disponibilità…</small></span>
+                                <input id="configBiometricToggle" type="checkbox"
+                                    onchange="impostaAccessoBiometrico(this.checked)">
+                            </label>
                         </section>
 
                         <section class="calendar-panel config-panel">

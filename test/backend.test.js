@@ -8,6 +8,16 @@ const root = path.resolve(__dirname, '..');
 
 function loadScript(file, sandbox) {
   if (file !== 'NotificationPrefs.js' && typeof sandbox.notificaAbilitata_ !== 'function') {
+    if (!sandbox.PropertiesService) {
+      const properties = new Map();
+      sandbox.PropertiesService = {
+        getScriptProperties: () => ({
+          getProperty: key => properties.get(key) || null,
+          setProperty: (key, value) => properties.set(key, value),
+          deleteProperty: key => properties.delete(key)
+        })
+      };
+    }
     loadScript('NotificationPrefs.js', sandbox);
   }
   const source = fs.readFileSync(path.join(root, file), 'utf8');
@@ -1446,6 +1456,7 @@ test('eventi: il dispatcher serve il link pubblico e registra il voto esterno', 
 
 test('api: crea sessioni dopo il login e vincola le azioni admin all’identità autenticata', () => {
   const cacheValues = new Map();
+  const properties = new Map();
   let updatePayload = null;
   let datiUtenteRichiesti = null;
   let tokenCounter = 0;
@@ -1462,14 +1473,22 @@ test('api: crea sessioni dopo il login e vincola le azioni admin all’identità
       MimeType: { JSON: 'JSON' },
       createTextOutput: content => ({ getContent: () => content, setMimeType() { return this; } })
     },
-    verificaLogin: ({ email, password }) => ['admin@example.it', 'member@example.it'].includes(email) && password === 'pw' ? 'OK_LOGIN' : 'ERR_CREDENZIALI',
+    verificaLogin: ({ email, password }) => ['admin@example.it', 'member@example.it', 'segretario@example.it'].includes(email) && password === 'pw' ? 'OK_LOGIN' : 'ERR_CREDENZIALI',
     getDatiUtente: email => {
       datiUtenteRichiesti = email;
-      return { email, ruolo: email === 'admin@example.it' ? 'Presidente' : 'Socio semplice' };
+      return { email, ruolo: email === 'admin@example.it' ? 'Presidente' : email === 'segretario@example.it' ? 'Segretario' : 'Socio semplice' };
     },
     isRuoloAmministrativo: ruolo => ruolo === 'Presidente',
+    PropertiesService: {
+      getScriptProperties: () => ({
+        getProperty: key => properties.get(key) || null,
+        setProperty: (key, value) => properties.set(key, value),
+        deleteProperty: key => properties.delete(key)
+      })
+    },
     adminUpdateSocio: dati => { updatePayload = dati; return 'OK'; }
   };
+  loadScript('NotificationPrefs.js', context);
   loadScript('main.js', context);
 
   const rispostaEndpoint = richiesta => JSON.parse(context.doPost({ postData: { contents: JSON.stringify(richiesta) } }).getContent());
@@ -1507,6 +1526,23 @@ test('api: crea sessioni dopo il login e vincola le azioni admin all’identità
   });
   assert.equal(forbidden.status, 'ERROR');
   assert.equal(updatePayload.adminEmail, 'admin@example.it');
+  const manutenzioneNegata = rispostaEndpoint({
+    azione: 'salvaConfigurazioneNotificheGlobali',
+    token: memberLogin.token,
+    payload: { email: 'segretario@example.it', attive: false }
+  });
+  assert.equal(manutenzioneNegata.status, 'ERROR');
+  assert.equal(properties.has('NOTIFICHE_CONFIGURAZIONE'), false);
+
+  const secretaryLogin = rispostaEndpoint({ azione: 'login', email: 'segretario@example.it', password: 'pw' });
+  const configurazione = rispostaEndpoint({
+    azione: 'salvaConfigurazioneNotificheGlobali',
+    token: secretaryLogin.token,
+    payload: { email: 'member@example.it', attive: false }
+  });
+  assert.equal(configurazione.status, 'SUCCESS');
+  assert.equal(configurazione.data.attive, false);
+  assert.equal(properties.has('NOTIFICHE_CONFIGURAZIONE'), true);
 
   const clientSource = fs.readFileSync(path.join(root, 'www', 'app.js'), 'utf8');
   const clientActions = Array.from(clientSource.matchAll(/chiamaServer\(\s*['"]([^'"]+)['"]/g), match => match[1]);
@@ -1562,7 +1598,7 @@ test('firme: invia OTP e lega il codice al documento richiesto', () => {
 test('centro notifiche: tutto attivo di default, preferenze per canale e canali obbligatori', () => {
   const properties = new Map();
   const context = {
-    getDatiUtente: email => ({ email, ruolo: 'Socio' }),
+    getDatiUtente: email => ({ email, ruolo: email === 'segretario@example.it' ? 'Segretario' : 'Socio' }),
     isRuoloAmministrativo: () => false,
     PropertiesService: {
       getScriptProperties: () => ({
@@ -1594,6 +1630,24 @@ test('centro notifiche: tutto attivo di default, preferenze per canale e canali 
   assert.equal(context.notificaAbilitata_('anna@example.it', 'evento_nuovo', 'email'), true);
   assert.deepEqual(Array.from(context.filtraDestinatariNotifica_(['mario@example.it', 'anna@example.it'], 'evento_nuovo', 'email')), ['anna@example.it']);
   assert.equal(salvate.notifiche.some(voce => voce.soloAdmin), false);
+
+  assert.equal(context.getConfigurazioneNotificheGlobali('mario@example.it').ok, false);
+  assert.equal(context.getConfigurazioneNotificheGlobali('segretario@example.it').ok, true);
+  context.salvaConfigurazioneNotificheGlobali({
+    email: 'segretario@example.it',
+    attive: false
+  });
+  assert.equal(context.notificaAbilitata_('anna@example.it', 'evento_nuovo', 'app'), false);
+  assert.equal(context.notificaAbilitata_('anna@example.it', 'firma_otp', 'email'), true);
+
+  context.salvaConfigurazioneNotificheGlobali({
+    email: 'segretario@example.it',
+    attive: true,
+    notifiche: { evento_nuovo: false, inesistente: false }
+  });
+  assert.equal(context.notificaAbilitata_('anna@example.it', 'evento_nuovo', 'email'), false);
+  assert.equal(context.notificaAbilitata_('anna@example.it', 'evento_nuovo', 'app'), false);
+  assert.equal(context.notificaAbilitata_('anna@example.it', 'evento_promemoria', 'email'), true);
 
   context.salvaPreferenzeNotifiche({ email: 'mario@example.it', preferenze: { evento_nuovo: { email: true } } });
   assert.equal(properties.has('NOTIFICHE_PREF|mario@example.it'), false);

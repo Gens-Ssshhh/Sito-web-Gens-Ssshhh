@@ -159,6 +159,11 @@ function utenteCorrenteHaRuoloAdmin() {
     return isRuoloAmministrativo(utente.ruolo);
 }
 
+function utenteCorrenteESegretario() {
+    var utente = (window.__gensAppData && window.__gensAppData.utente) || {};
+    return String(utente.ruolo || "").trim().toUpperCase().replace(/[\s-]/g, "") === "SEGRETARIO";
+}
+
 function controllaAggiornamentoApp() {
     if (appUpdateChecked || !window.Capacitor || !window.Capacitor.getPlatform || window.Capacitor.getPlatform() !== 'android') return;
     appUpdateChecked = true;
@@ -353,6 +358,10 @@ function nav(viewId, el) {
         showToast("Non hai l'autorizzazione per accedere all'amministrazione.", "error");
         return;
     }
+    if (viewId === 'viewManutenzione' && !utenteCorrenteESegretario()) {
+        showToast("La manutenzione delle notifiche è riservata al segretario.", "error");
+        return;
+    }
 
     // 1. GESTIONE PAGINE (Nascondi tutte, mostra quella giusta)
     document.querySelectorAll('.page-section').forEach(x => {
@@ -396,6 +405,7 @@ function nav(viewId, el) {
         'viewMovimenti': 'Movimenti',
         'viewReport': 'Report',
         'viewConfigurazione': 'Configurazione',
+        'viewManutenzione': 'Manutenzione',
         'viewElezioni': 'Centro Elettorale',
         'viewDocs': 'Archivio',
         'viewFirma': 'Firma Digitale',
@@ -428,8 +438,9 @@ function nav(viewId, el) {
             'viewSpese': 12,
             'viewFirma': 13,
             'viewConfigurazione': 14,
-            'viewReport': 15,
-            'viewProf': 16
+            'viewManutenzione': 15,
+            'viewReport': 16,
+            'viewProf': 17
         };
         var items = document.querySelectorAll('.nav-item');
         items.forEach(x => x.classList.remove('active'));
@@ -485,6 +496,7 @@ function nav(viewId, el) {
     if (viewId === 'viewMovimenti') renderMovimentiView();
     if (viewId === 'viewReport') renderReportView();
     if (viewId === 'viewConfigurazione') renderConfigurazioneView();
+    if (viewId === 'viewManutenzione') renderManutenzioneView();
     if (viewId === 'viewAdmin') {
         renderAdminView();
         caricaDatiAdmin();
@@ -793,6 +805,82 @@ function renderConfigurazioneView() {
     }
 
     caricaPreferenzeNotificheUtente();
+}
+
+function renderManutenzioneView() {
+    if (!utenteCorrenteESegretario()) return;
+    caricaConfigurazioneNotificheGlobali();
+}
+
+async function caricaConfigurazioneNotificheGlobali() {
+    var status = document.getElementById('globalNotificationStatus');
+    var list = document.getElementById('globalNotificationList');
+    if (status) status.textContent = 'Caricamento autorizzazioni…';
+    if (list) list.innerHTML = '<p class="notification-empty">Caricamento autorizzazioni…</p>';
+    try {
+        var risultato = await chiamaServer('getConfigurazioneNotificheGlobali', {}, true);
+        if (!risultato || !risultato.ok || !Array.isArray(risultato.notifiche)) {
+            throw new Error('Il server non ha restituito la configurazione delle notifiche.');
+        }
+        renderConfigurazioneNotificheGlobali(risultato);
+    } catch (error) {
+        if (status) status.textContent = error.message || 'Impossibile caricare le autorizzazioni.';
+        if (list) list.innerHTML = '<p class="notification-empty">Impossibile caricare le autorizzazioni. Riprova più tardi.</p>';
+    }
+}
+
+function renderConfigurazioneNotificheGlobali(configurazione) {
+    var toggle = document.getElementById('globalNotificationsToggle');
+    var status = document.getElementById('globalNotificationStatus');
+    var list = document.getElementById('globalNotificationList');
+    if (!toggle || !list) return;
+    toggle.checked = configurazione.attive !== false;
+    if (status) status.textContent = toggle.checked ? 'Le notifiche autorizzate sono attive per tutti.' : 'Invio sospeso per tutti.';
+
+    var gruppi = [];
+    var perGruppo = {};
+    configurazione.notifiche.forEach(function (voce) {
+        if (!perGruppo[voce.gruppo]) {
+            perGruppo[voce.gruppo] = [];
+            gruppi.push(voce.gruppo);
+        }
+        perGruppo[voce.gruppo].push(voce);
+    });
+    list.innerHTML = gruppi.map(function (gruppo) {
+        return '<div class="notification-prefs-group"><h4>' + escapeActionCenterText(gruppo) + '</h4>' +
+            perGruppo[gruppo].map(function (voce) {
+                return '<label class="config-toggle-row maintenance-notification-row">' +
+                    '<span><strong>' + escapeActionCenterText(voce.titolo) + '</strong><small>' +
+                    escapeActionCenterText(voce.descrizione) +
+                    (voce.obbligatoria ? ' I messaggi di sicurezza obbligatori non vengono disattivati.' : '') +
+                    '</small></span><input type="checkbox" data-id="' + escapeActionCenterText(voce.id) +
+                    '"' + (voce.attiva ? ' checked' : '') +
+                    ' onchange="salvaAutorizzazioneNotificaGlobale(this, false)"></label>';
+            }).join('') + '</div>';
+    }).join('');
+}
+
+async function salvaAutorizzazioneNotificheGlobali(input, generale) {
+    var status = document.getElementById('globalNotificationSaveStatus');
+    var controls = document.querySelectorAll('#globalNotificationsToggle, #globalNotificationList input');
+    var valorePrecedente = !input.checked;
+    var payload = generale ? { attive: input.checked } : { notifiche: {} };
+    if (!generale) payload.notifiche[input.dataset.id] = input.checked;
+    controls.forEach(function (control) { control.disabled = true; });
+    if (status) status.textContent = 'Salvataggio…';
+    try {
+        var risultato = await chiamaServer('salvaConfigurazioneNotificheGlobali', payload, true);
+        if (!risultato || !risultato.ok || !Array.isArray(risultato.notifiche)) {
+            throw new Error('Il server non ha salvato la configurazione.');
+        }
+        renderConfigurazioneNotificheGlobali(risultato);
+        if (status) status.textContent = 'Autorizzazioni aggiornate per tutti.';
+    } catch (error) {
+        input.checked = valorePrecedente;
+        if (status) status.textContent = error.message || 'Impossibile salvare le autorizzazioni.';
+    } finally {
+        controls.forEach(function (control) { control.disabled = false; });
+    }
 }
 
 function impostaStatoPreferenzeNotifiche(testo) {
@@ -1247,6 +1335,8 @@ function renderStartData(data, fromCache) {
 
     // 1. POPOLA DATI UTENTE (Sidebar e Welcome)
     var u = data.utente;
+    var maintenanceNavItem = document.getElementById('maintenanceNavItem');
+    if (maintenanceNavItem) maintenanceNavItem.classList.toggle('hidden', !utenteCorrenteESegretario());
     document.getElementById('welcomeMsg').innerText = "Ciao, " + u.nome + " " + (u.cognome || "");
     document.getElementById('sumVoti').innerText = u.votiAttivi;
     document.getElementById('sumFiles').innerText = u.numFiles;

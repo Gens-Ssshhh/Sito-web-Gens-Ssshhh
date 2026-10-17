@@ -5,6 +5,8 @@
 // Disponibilità del canale: 0 = non prevista, 1 = modificabile, 2 = obbligatoria.
 
 var NOTIFICHE_PREFIX_PROPRIETA_ = "NOTIFICHE_PREF|";
+var NOTIFICHE_CONFIGURAZIONE_PROPRIETA_ = "NOTIFICHE_CONFIGURAZIONE";
+var cacheConfigurazioneNotifiche_ = null;
 
 var NOTIFICHE_CATALOGO_ = [
   { id: "password_temporanea", gruppo: "Account e sicurezza", titolo: "Password temporanea", descrizione: "Invio della nuova password dopo un reset.", email: 2, app: 1 },
@@ -65,8 +67,74 @@ function notificaAbilitata_(email, id, canale) {
   var disponibilita = voce[canale];
   if (disponibilita === 0) return false;
   if (disponibilita === 2) return true;
+  var configurazione = leggiConfigurazioneNotifiche_();
+  if (!configurazione.attive || configurazione.notifiche[id] === false) return false;
   var scelta = leggiPreferenzeNotifiche_(email)[id];
   return !(scelta && scelta[canale === "email" ? "e" : "a"] === 0);
+}
+
+function leggiConfigurazioneNotifiche_() {
+  if (cacheConfigurazioneNotifiche_) return cacheConfigurazioneNotifiche_;
+  var configurazione = { attive: true, notifiche: {} };
+  var salvato = PropertiesService.getScriptProperties().getProperty(NOTIFICHE_CONFIGURAZIONE_PROPRIETA_);
+  if (salvato) {
+    try {
+      var letta = JSON.parse(salvato) || {};
+      if (typeof letta.attive === "boolean") configurazione.attive = letta.attive;
+      if (letta.notifiche && typeof letta.notifiche === "object") configurazione.notifiche = letta.notifiche;
+    } catch (e) {
+      console.error("Configurazione globale notifiche non valida:", e);
+      configurazione.attive = false;
+    }
+  }
+  cacheConfigurazioneNotifiche_ = configurazione;
+  return configurazione;
+}
+
+function utenteEsegretarioNotifiche_(email) {
+  var utente = getDatiUtente(email);
+  var ruolo = String(utente && utente.ruolo || "").trim().toUpperCase().replace(/[\s-]/g, "");
+  return ruolo === "SEGRETARIO";
+}
+
+function getConfigurazioneNotificheGlobali(email) {
+  if (!utenteEsegretarioNotifiche_(email)) return { ok: false };
+  var configurazione = leggiConfigurazioneNotifiche_();
+  return {
+    ok: true,
+    attive: configurazione.attive,
+    notifiche: NOTIFICHE_CATALOGO_.map(function (voce) {
+      return {
+        id: voce.id,
+        gruppo: voce.gruppo,
+        titolo: voce.titolo,
+        descrizione: voce.descrizione,
+        attiva: configurazione.notifiche[voce.id] !== false,
+        obbligatoria: voce.email === 2 || voce.app === 2
+      };
+    })
+  };
+}
+
+function salvaConfigurazioneNotificheGlobali(dati) {
+  dati = dati || {};
+  if (!utenteEsegretarioNotifiche_(dati.email)) return { ok: false };
+
+  var configurazione = leggiConfigurazioneNotifiche_();
+  if (typeof dati.attive === "boolean") configurazione.attive = dati.attive;
+  if (dati.notifiche && typeof dati.notifiche === "object" && !Array.isArray(dati.notifiche)) {
+    Object.keys(dati.notifiche).forEach(function (id) {
+      if (trovaNotificaCatalogo_(id) && typeof dati.notifiche[id] === "boolean") {
+        configurazione.notifiche[id] = dati.notifiche[id];
+      }
+    });
+  }
+  PropertiesService.getScriptProperties().setProperty(
+    NOTIFICHE_CONFIGURAZIONE_PROPRIETA_,
+    JSON.stringify(configurazione)
+  );
+  cacheConfigurazioneNotifiche_ = configurazione;
+  return getConfigurazioneNotificheGlobali(dati.email);
 }
 
 function filtraDestinatariNotifica_(emails, id, canale) {

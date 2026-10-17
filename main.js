@@ -37,7 +37,7 @@ var AZIONI_API_CONSENTITE = [
   "getElezioniPerCandidatura", "getGruppiSpese", "getListaDocumenti", "getListaFornitori",
   "getListaSociPerSponsor", "getNomiSociAttivi", "getNotificheUtente",
   "getPianoDeiContiDinamico", "getPreferenzeNotifiche", "getPropostaEventoPubblica", "getProposteEventi",
-  "getReportStorici", "ripristinaPreferenzeNotifiche", "salvaPreferenzeNotifiche", "getRichiesteFirmaUtente", "getRichiesteIscrizioneDaAvvallare",
+  "getReportStorici", "getConfigurazioneNotificheGlobali", "salvaConfigurazioneNotificheGlobali", "ripristinaPreferenzeNotifiche", "salvaPreferenzeNotifiche", "getRichiesteFirmaUtente", "getRichiesteIscrizioneDaAvvallare",
   "getRispostaRicompilazioneOspite", "getRisultatiLive", "getSociPerFattura",
   "getStartData", "getStoricoFirmeUtente", "inviaCandidatura", "inviaLinkReset",
   "inviaRichiestaDimissioni", "login", "logout", "modificaPropostaEvento",
@@ -182,6 +182,17 @@ function doPost(e) {
       })).setMimeType(ContentService.MimeType.JSON);
     }
 
+    if (azione === "getConfigurazioneNotificheGlobali" || azione === "salvaConfigurazioneNotificheGlobali") {
+      var segretario = getDatiUtente(emailSessione);
+      var ruoloSegretario = String(segretario && segretario.ruolo || "").trim().toUpperCase().replace(/[\s-]/g, "");
+      if (ruoloSegretario !== "SEGRETARIO") {
+        return ContentService.createTextOutput(JSON.stringify({
+          status: "ERROR",
+          messaggio: "Operazione riservata al segretario."
+        })).setMimeType(ContentService.MimeType.JSON);
+      }
+    }
+
     // Results for event proposals are public and contain aggregated counts only.
     if (azione === "getProposteEventi") {
       var payloadProposte = richiesta.payload;
@@ -233,9 +244,18 @@ function doPost(e) {
     // Sensitive identity parameters must always come from the validated session.
     if (azione === "getDatiUtente" || azione === "getDashboardAdmin" || azione === "getPreferenzeNotifiche" || azione === "ripristinaPreferenzeNotifiche") {
       richiesta.payload = emailSessione;
+    } else if (azione === "getConfigurazioneNotificheGlobali") {
+      richiesta.payload = emailSessione;
     } else if (azione === "salvaPreferenzeNotifiche") {
       var payloadPreferenze = richiesta.payload && typeof richiesta.payload === "object" ? richiesta.payload : {};
       richiesta.payload = { email: emailSessione, preferenze: payloadPreferenze.preferenze };
+    } else if (azione === "salvaConfigurazioneNotificheGlobali") {
+      var payloadConfigurazioneNotifiche = richiesta.payload && typeof richiesta.payload === "object" ? richiesta.payload : {};
+      richiesta.payload = {
+        email: emailSessione,
+        attive: payloadConfigurazioneNotifiche.attive,
+        notifiche: payloadConfigurazioneNotifiche.notifiche
+      };
     } else if (/^admin/i.test(azione || "") && richiesta.payload && typeof richiesta.payload === "object") {
       richiesta.payload = vincolaIdentitaAdmin_(richiesta.payload, emailSessione);
     }

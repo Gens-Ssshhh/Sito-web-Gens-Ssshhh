@@ -244,6 +244,11 @@
                     onkeydown="if(event.key === 'Enter' || event.key === ' ') { event.preventDefault(); nav('viewConfigurazione', this); }">
                     <span class="nav-icon" aria-hidden="true">⚙</span><span>Configurazione</span>
                 </div>
+                <div id="maintenanceNavItem" class="nav-item compact nav-item-maintenance hidden" role="button"
+                    tabindex="0" onclick="nav('viewManutenzione', this)"
+                    onkeydown="if(event.key === 'Enter' || event.key === ' ') { event.preventDefault(); nav('viewManutenzione', this); }">
+                    <span class="nav-icon" aria-hidden="true">⚒</span><span>Manutenzione</span>
+                </div>
                 <div class="nav-item compact" role="button" tabindex="0" onclick="nav('viewReport', this)"
                     onkeydown="if(event.key === 'Enter' || event.key === ' ') { event.preventDefault(); nav('viewReport', this); }">
                     <span class="nav-icon" aria-hidden="true">◬</span><span>Report</span>
@@ -1610,6 +1615,37 @@
                                 onclick="eseguiLogout()">Esci da questo dispositivo</button>
                         </section>
                     </div>
+                </div>
+
+                <div id="viewManutenzione" class="page-section hidden">
+                    <div class="club-page-header">
+                        <div>
+                            <span class="section-kicker">Configurazione</span>
+                            <h2>Manutenzione notifiche</h2>
+                            <p>Gestisci le autorizzazioni globali: le modifiche si applicano a tutti i soci.</p>
+                        </div>
+                        <div class="club-status-badge"><span class="sidebar-status-dot"></span><span>Solo segretario</span></div>
+                    </div>
+
+                    <section class="calendar-panel config-panel maintenance-notifications">
+                        <div class="calendar-header-row">
+                            <div><span class="section-kicker">Controllo generale</span>
+                                <h3>Notifiche dell’associazione</h3>
+                            </div>
+                        </div>
+                        <p class="config-panel-copy">L’interruttore generale sospende tutte le notifiche configurabili.
+                            Le comunicazioni di sicurezza necessarie per accesso e firma restano attive.</p>
+                        <label class="config-toggle-row">
+                            <span><strong>Invio notifiche abilitato</strong><small id="globalNotificationStatus">Caricamento…</small></span>
+                            <input id="globalNotificationsToggle" type="checkbox"
+                                onchange="salvaAutorizzazioneNotificheGlobali(this, true)">
+                        </label>
+                        <div id="globalNotificationList" class="notification-prefs-list">
+                            <p class="notification-empty">Caricamento autorizzazioni…</p>
+                        </div>
+                        <p id="globalNotificationSaveStatus" class="config-status-message" role="status"
+                            aria-live="polite"></p>
+                    </section>
                 </div>
 
                 <div id="viewAdmin" class="page-section">

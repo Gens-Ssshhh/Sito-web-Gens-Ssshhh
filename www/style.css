@@ -346,6 +346,32 @@
   grid-column: 1 / -1;
 }
 
+.nav-item-maintenance {
+  margin-left: 12px;
+  padding-left: 12px;
+  border-left: 2px solid var(--gold-soft);
+}
+
+.maintenance-notifications {
+  max-width: 900px;
+}
+
+.maintenance-notification-row {
+  align-items: center;
+  padding: 10px 0;
+}
+
+.maintenance-notification-row + .maintenance-notification-row {
+  border-top: 1px solid var(--line);
+}
+
+.maintenance-notification-row input {
+  width: 20px;
+  height: 20px;
+  flex: 0 0 auto;
+  accent-color: var(--navy);
+}
+
 .notification-prefs-toolbar {
   display: flex;
   width: 100%;
@@ -3242,6 +3268,64 @@ textarea {
   font-family: 'Cormorant Garamond', serif;
   font-size: 28px;
   letter-spacing: 0.02em;
+}
+
+@media (min-width: 769px) and (max-height: 700px) {
+  #viewLogin {
+    overflow-y: auto;
+    padding: 14px 26px;
+  }
+
+  #viewLogin .auth-card {
+    height: auto;
+    min-height: 0;
+    max-height: none;
+  }
+
+  #viewLogin .auth-left {
+    padding: clamp(18px, 3.2vh, 30px) clamp(28px, 5vw, 64px);
+  }
+
+  #viewLogin .auth-right {
+    padding: clamp(18px, 3.2vh, 30px) clamp(24px, 4vw, 52px);
+  }
+
+  #viewLogin .auth-title {
+    font-size: clamp(54px, 10vh, 70px);
+  }
+
+  #viewLogin .auth-sub {
+    margin-bottom: 18px;
+    font-size: clamp(28px, 5.5vh, 38px);
+  }
+
+  #viewLogin .input-group {
+    margin-bottom: 10px;
+  }
+
+  #viewLogin .form-input {
+    height: 48px;
+  }
+
+  #viewLogin .auth-actions .auth-login-btn,
+  #viewLogin .auth-signup-btn {
+    height: 48px;
+  }
+
+  #viewLogin .auth-left>div[style*="margin-top: 20px"] {
+    margin-top: 12px !important;
+  }
+
+  #viewLogin .login-brand-mark {
+    width: clamp(110px, 20vh, 150px);
+    height: clamp(110px, 20vh, 150px);
+    font-size: clamp(64px, 12vh, 84px);
+  }
+
+  #viewLogin .login-brand-caption {
+    margin-top: 14px;
+    font-size: 24px;
+  }
 }
 
 #viewLogin .auth-right-badge {

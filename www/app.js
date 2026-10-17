@@ -40,6 +40,7 @@ var curPass = "";
 var authToken = localStorage.getItem('gens_session_token') || "";
 var BIOMETRIC_CREDENTIALS_KEY = 'gens_login_credentials';
 var BIOMETRIC_ENABLED_KEY = 'gens_biometric_enabled';
+var biometricPluginAdapters = null;
 var curDocMode = "PUBBLICO";
 var configVoto = { mode: "", max: 1 };
 var pushNotificationsInitialized = false;
@@ -54,11 +55,42 @@ var bilancioCacheTimestamp = 0;
 var newsRequestInFlight = null;
 
 function getBiometricPlugins() {
-    var plugins = window.Capacitor && window.Capacitor.Plugins;
-    return {
-        auth: plugins && plugins.BiometricAuthNative,
-        storage: plugins && plugins.SecureStorage
+    if (biometricPluginAdapters) return biometricPluginAdapters;
+    var capacitor = window.Capacitor;
+    if (!capacitor || typeof capacitor.registerPlugin !== 'function') return { auth: null, storage: null };
+
+    var nativeAuth = capacitor.registerPlugin('BiometricAuthNative');
+    var nativeStorage = capacitor.registerPlugin('SecureStorage');
+    var storageKey = 'capacitor-storage_' + BIOMETRIC_CREDENTIALS_KEY;
+    biometricPluginAdapters = {
+        auth: {
+            checkBiometry: function () {
+                return nativeAuth.checkBiometry();
+            },
+            authenticate: function (options) {
+                return nativeAuth.internalAuthenticate(options);
+            }
+        },
+        storage: {
+            get: async function () {
+                var result = await nativeStorage.internalGetItem({ prefixedKey: storageKey });
+                return result.data === null ? null : JSON.parse(result.data);
+            },
+            set: function (key, value) {
+                return nativeStorage.internalSetItem({
+                    prefixedKey: 'capacitor-storage_' + key,
+                    data: JSON.stringify(value)
+                });
+            },
+            remove: async function (key) {
+                var result = await nativeStorage.internalRemoveItem({
+                    prefixedKey: 'capacitor-storage_' + key
+                });
+                return result.success;
+            }
+        }
     };
+    return biometricPluginAdapters;
 }
 
 async function verificaDisponibilitaBiometrica() {

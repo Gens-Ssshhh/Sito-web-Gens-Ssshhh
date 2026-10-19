@@ -4179,28 +4179,55 @@ async function inviaRichiestaIscrizione(event) {
 async function condividiModuloIscrizione() {
     var link = new URL('https://Gens-Ssshhh.github.io/Sito-web-Gens-Ssshhh/index.html');
     link.searchParams.set('iscrizione', '1');
-    try {
-        if (navigator.share) {
-            await navigator.share({ title: 'Richiesta di iscrizione Gens Ssshhh', url: link.href });
-        } else if (navigator.clipboard && navigator.clipboard.writeText) {
-            await navigator.clipboard.writeText(link.href);
-            showToast('Link di iscrizione copiato.', 'success');
-        } else {
-            var campo = document.createElement('textarea');
-            campo.value = link.href;
-            campo.setAttribute('readonly', '');
-            campo.style.position = 'fixed';
-            campo.style.opacity = '0';
-            document.body.appendChild(campo);
-            campo.select();
-            var copiato = document.execCommand('copy');
-            campo.remove();
-            if (!copiato) throw new Error('Copia non supportata');
-            showToast('Link di iscrizione copiato.', 'success');
+    await condividiLinkEsterno_(link.href, 'Richiesta di iscrizione Gens Ssshhh', 'Link di iscrizione');
+}
+
+async function condividiLinkEsterno_(url, titolo, etichetta) {
+    if (typeof navigator.share === 'function') {
+        try {
+            await navigator.share({ title: titolo, url: url });
+            return;
+        } catch (error) {
+            if (error && error.name === 'AbortError') return;
+            console.warn('Condivisione nativa non disponibile; provo a copiare il link.', error);
         }
-    } catch (error) {
-        if (error.name !== 'AbortError') showToast('Non è stato possibile condividere il link.', 'error');
     }
+
+    var copiato = false;
+    if (navigator.clipboard && typeof navigator.clipboard.writeText === 'function') {
+        try {
+            await navigator.clipboard.writeText(url);
+            copiato = true;
+        } catch (error) {
+            console.warn('Clipboard API non disponibile; provo il metodo di copia alternativo.', error);
+        }
+    }
+
+    if (!copiato) {
+        var campo = document.createElement('textarea');
+        campo.value = url;
+        campo.setAttribute('readonly', '');
+        campo.style.position = 'fixed';
+        campo.style.opacity = '0';
+        document.body.appendChild(campo);
+        campo.focus();
+        campo.select();
+        try {
+            copiato = document.execCommand('copy');
+        } catch (error) {
+            console.warn('Copia tramite execCommand non riuscita.', error);
+        } finally {
+            campo.remove();
+        }
+    }
+
+    if (copiato) {
+        showToast(etichetta + ' copiato.', 'success');
+        return;
+    }
+
+    window.prompt('Copia manualmente questo link:', url);
+    showToast('Copia automatica non disponibile: copia il link dalla finestra visualizzata.', 'error');
 }
 
 async function caricaRichiesteIscrizione() {
@@ -5969,28 +5996,7 @@ async function votaPropostaEvento(propostaId, form, interesse, pulsante) {
 async function condividiPropostaEvento(propostaId) {
     var link = new URL('https://Gens-Ssshhh.github.io/Sito-web-Gens-Ssshhh/index.html');
     link.searchParams.set('evento', propostaId);
-    try {
-        if (navigator.share) {
-            await navigator.share({ title: 'Proposta evento Gens Ssshhh', url: link.href });
-        } else if (navigator.clipboard && navigator.clipboard.writeText) {
-            await navigator.clipboard.writeText(link.href);
-            showToast('Link per gli esterni copiato.', 'success');
-        } else {
-            var campoCopia = document.createElement('textarea');
-            campoCopia.value = link.href;
-            campoCopia.setAttribute('readonly', '');
-            campoCopia.style.position = 'fixed';
-            campoCopia.style.opacity = '0';
-            document.body.appendChild(campoCopia);
-            campoCopia.select();
-            var copiato = document.execCommand('copy');
-            campoCopia.remove();
-            if (!copiato) throw new Error('Copia non supportata');
-            showToast('Link per gli esterni copiato.', 'success');
-        }
-    } catch (error) {
-        if (error.name !== 'AbortError') showToast('Non è stato possibile condividere il link.', 'error');
-    }
+    await condividiLinkEsterno_(link.href, 'Proposta evento Gens Ssshhh', 'Link per gli esterni');
 }
 
 async function apriVotoPubblicoEvento(propostaId, tokenModifica) {

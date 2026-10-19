@@ -514,6 +514,59 @@
   margin: 5px 0 0;
 }
 
+.invoice-tax-settings,
+.invoice-payment-settings {
+  display: grid;
+  gap: 10px;
+}
+
+.invoice-number-grid,
+.invoice-payment-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.invoice-number-grid {
+  margin-top: 14px;
+}
+
+.invoice-description-field {
+  margin-top: 14px;
+}
+
+.invoice-payment-settings {
+  margin-top: 22px;
+}
+
+.invoice-payment-settings h4 {
+  margin: 0;
+}
+
+.invoice-field-label,
+.invoice-payment-grid label {
+  display: block;
+}
+
+.invoice-field-label {
+  margin-bottom: 5px;
+  font-size: 12px;
+  font-weight: 700;
+  color: #475569;
+}
+
+.invoice-payment-grid label .form-input {
+  margin-top: 5px;
+}
+
+@media (max-width: 600px) {
+  .invoice-number-grid,
+  .invoice-payment-grid {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 10px;
+  }
+}
+
 @media (max-width: 768px) {
 
   .configuration-grid,

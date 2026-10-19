@@ -1223,7 +1223,7 @@ async function chiamaServer(nomeAzione, parametri = {}, propagaErrore = false, t
                 authToken = "";
                 localStorage.removeItem('gens_session_token');
             }
-            if (propagaErrore) throw new Error(risultato.messaggio || "Errore del server");
+            if (propagaErrore) throw new Error(risultato.messaggio || risultato.error || "Errore del server");
             return null;
         }
     } catch (err) {
@@ -2821,19 +2821,32 @@ function aggiornaListaMovimentiPD() {
     });
 }
 
-function scaricaExcel() {
+async function scaricaExcel() {
     var anno = prompt("Inserisci l'anno da esportare (es. 2026):", new Date().getFullYear());
     if (!anno) return;
+    if (!/^\d{4}$/.test(String(anno).trim())) {
+        showToast("Inserisci un anno valido nel formato AAAA.", "error");
+        return;
+    }
 
     showToast("Generazione Excel in corso...", "info");
 
-    chiamaServer("exportBilancioExcel", [curEmail, anno]).then(function (base64) {
+    try {
+        var base64 = await chiamaServer("exportBilancioExcel", [curEmail, String(anno).trim()], true);
+        if (typeof base64 !== "string" || !base64 ||
+            !/^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/.test(base64)) {
+            throw new Error("Il server non ha restituito un file CSV valido.");
+        }
+
         var a = document.createElement('a');
         a.href = "data:text/csv;base64," + base64;
         a.download = "Bilancio_Gens_" + anno + ".csv";
         document.body.appendChild(a); a.click(); document.body.removeChild(a);
         showToast("Download avviato!", "success");
-    });
+    } catch (err) {
+        console.error("Esportazione bilancio non riuscita:", err);
+        showToast("Esportazione non riuscita: " + (err.message || "errore del server."), "error");
+    }
 }
 
 // Variabile globale per immagazzinare il piano dei conti
@@ -3582,6 +3595,8 @@ function chiudiSuggerimentiSociFattura() {
 
 function preparaCampiFattura() {
     var deadline = document.getElementById('xmlScadenza');
+    var invoiceNumber = document.getElementById('xmlNumero');
+    if (invoiceNumber) invoiceNumber.value = '';
     if (deadline && !deadline.value) {
         var date = new Date();
         date.setDate(date.getDate() + 15);
@@ -3590,10 +3605,16 @@ function preparaCampiFattura() {
     var method = document.getElementById('xmlMetodoPagamento');
     var details = document.getElementById('xmlDatiPagamento');
     if (method && !method.dataset.preferenceLoaded) {
-        method.value = localStorage.getItem('gens_invoice_payment_method') || 'BONIFICO';
+        var savedMethod = localStorage.getItem('gens_invoice_payment_method');
+        method.value = ['BONIFICO', 'PAYPAL', 'CONTANTI'].indexOf(savedMethod) >= 0 ? savedMethod : 'BONIFICO';
         method.dataset.preferenceLoaded = 'true';
     }
-    if (details && !details.value) details.value = localStorage.getItem('gens_invoice_payment_details') || '';
+    if (details && method && localStorage.getItem('gens_invoice_payment_method') === 'SATISPAY') {
+        details.value = '';
+        localStorage.removeItem('gens_invoice_payment_details');
+    } else if (details && !details.value) {
+        details.value = localStorage.getItem('gens_invoice_payment_details') || '';
+    }
     aggiornaRegimeFattura();
 }
 
@@ -3635,7 +3656,6 @@ function avviaCreazioneXML() {
         scadenzaPagamento: document.getElementById("xmlScadenza").value,
         metodoPagamento: document.getElementById("xmlMetodoPagamento").value,
         datiPagamento: document.getElementById("xmlDatiPagamento").value.trim(),
-        numero: document.getElementById("xmlNumero").value,
         importo: document.getElementById("xmlImporto").value,
         causale: document.getElementById("xmlCausale").value,
         email: document.getElementById("xmlEmail").value,
@@ -3650,8 +3670,8 @@ function avviaCreazioneXML() {
         prov: document.getElementById("xmlProv").value
     };
 
-    if (!payload.numero || !payload.importo || !payload.causale) {
-        return showToast("Compila Numero, Importo e Causale", "error");
+    if (!payload.importo || !payload.causale) {
+        return showToast("Compila Importo e Causale", "error");
     }
     if (payload.causale.trim().length < 12) return showToast('Descrivi con precisione il bene o servizio (almeno 12 caratteri).', 'error');
     if (payload.causale.trim().length < 12) return showToast('Inserisci una descrizione dettagliata della prestazione (almeno 12 caratteri).', 'error');
@@ -3680,7 +3700,9 @@ function avviaCreazioneXML() {
             return;
         }
 
-        var nomePulito = payload.numero.replace("/", "_").replace("\\", "_");
+        var numeroFattura = res.numero;
+        document.getElementById("xmlNumero").value = numeroFattura;
+        var nomePulito = numeroFattura.replace("/", "_").replace("\\", "_");
 
         // 1. SCARICA IL PDF CORTESE
         var aPdf = document.createElement("a");

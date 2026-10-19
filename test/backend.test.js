@@ -199,6 +199,42 @@ test('fatture: admin cerca soci attivi e invia XML/PDF con sollecito pagamento',
   assert.match(sent.body, /saldare entro la data indicata/);
 });
 
+test('bilancio: esporta il foglio contabile corretto come CSV UTF-8 valido', () => {
+  const righe = [
+    ['Data', 'Descrizione', 'Conto Dare', 'Conto Avere', 'Importo', 'Controparte', 'CF/PIVA', 'Regime', 'Documento'],
+    [new Date(2026, 2, 4), 'Quota; "annuale"', 'Banca', 'Quote', 12.5, 'Rossi\nMario', 'RSSMRA80A01F205X', 'Istituzionale', 'Fatt. 1']
+  ];
+  const sheet = { getDataRange: () => ({ getValues: () => righe }) };
+  const idFoglio = 'id-contabilita';
+  let idAperto = null;
+  const context = {
+    ID_FOGLIO_CONTABILITA: idFoglio,
+    getDatiUtente: () => ({ ruolo: 'Vicepresidente' }),
+    isRuoloAmministrativo: ruolo => ['presidente', 'vicepresidente', 'segretario', 'tesoriere'].includes(String(ruolo).toLowerCase()),
+    SpreadsheetApp: {
+      openById: id => {
+        idAperto = id;
+        return { getSheetByName: name => name === 'bilancio' ? sheet : null };
+      }
+    },
+    Utilities: {
+      formatDate: date => {
+        const day = String(date.getDate()).padStart(2, '0');
+        const month = String(date.getMonth() + 1).padStart(2, '0');
+        return `${day}/${month}/${date.getFullYear()}`;
+      },
+      newBlob: content => ({ getBytes: () => Buffer.from(content, 'utf8') }),
+      base64Encode: bytes => Buffer.from(bytes).toString('base64')
+    }
+  };
+  loadScript('Finance.js', context);
+
+  const csv = Buffer.from(context.exportBilancioExcel('vice@example.it', '2026'), 'base64').toString('utf8');
+  assert.equal(idAperto, idFoglio);
+  assert.ok(csv.startsWith('\uFEFFData;N. Doc;'));
+  assert.match(csv, /04\/03\/2026;Fatt\. 1;"Quota; ""annuale""";Banca;Quote;12,50;"Rossi\nMario"/);
+});
+
 test('fatture: XML e PDF riportano regime, bollo, scadenza e pagamento', () => {
   const sociRows = [
     ['Nome', 'Password', 'Email', '', 'Cognome', '', 'Indirizzo', '', '', 'Numero Tessera', 'Data Scadenza', 'Stato Socio', 'Carica sociale', '', 'Codice Fiscale', '', '', '', 'ID_Univoco', 'CAP res', 'Comune res'],
@@ -206,8 +242,11 @@ test('fatture: XML e PDF riportano regime, bollo, scadenza e pagamento', () => {
     ['Admin', 'hash', 'admin@example.it', '', 'Admin', '', '', '', '', '', '', 'ATTIVO', 'Tesoriere']
   ];
   const sociSheet = { getDataRange: () => ({ getValues: () => sociRows }) };
-  const invoiceRows = [];
-  const invoiceSheet = { appendRow: row => invoiceRows.push(row) };
+  const invoiceRows = [['Data', 'Numero']];
+  const invoiceSheet = {
+    appendRow: row => invoiceRows.push(row),
+    getDataRange: () => ({ getValues: () => invoiceRows })
+  };
   const configSheet = { getRange: () => ({ getValue: () => 'segreteria@example.it' }) };
   const archiveSpreadsheet = { getSheetByName: name => name === 'Fatture Emesse' ? invoiceSheet : null };
   const sent = [];
@@ -217,6 +256,7 @@ test('fatture: XML e PDF riportano regime, bollo, scadenza e pagamento', () => {
       getActiveSpreadsheet: () => ({ getSheetByName: name => name === 'soci' ? sociSheet : name === 'Config' ? configSheet : null }),
       openById: () => archiveSpreadsheet
     },
+    LockService: { getScriptLock: () => ({ waitLock() { }, releaseLock() { } }) },
     getDatiUtente: email => email === 'admin@example.it' ? { ruolo: 'Tesoriere' } : null,
     isRuoloAmministrativo: ruolo => String(ruolo).toLowerCase() === 'tesoriere',
     verificaLogin: data => data.password === 'pw' ? 'OK_LOGIN' : 'ERR_AUTH',
@@ -247,13 +287,15 @@ test('fatture: XML e PDF riportano regime, bollo, scadenza e pagamento', () => {
 
   const fattura = context.generaFatturaXML({
     adminEmail: 'admin@example.it', password: 'pw', tipoCliente: 'socio', email: 'mario@example.it',
-    numero: '1', importo: '100.00', causale: 'Quota associativa annuale 2026', regimeFiscale: 'RF19',
+    numero: '999/2020', importo: '100.00', causale: 'Quota associativa annuale 2026', regimeFiscale: 'RF19',
     scadenzaPagamento: '2026-10-24', metodoPagamento: 'BONIFICO', datiPagamento: 'IT60X0542811101000000123456'
   });
   const xml = Buffer.from(fattura.xmlBase64.split(',')[1], 'base64').toString();
   const pdfHtml = Buffer.from(fattura.pdfBase64.split(',')[1], 'base64').toString();
+  const annoCorrente = String(new Date().getFullYear());
   assert.equal(fattura.emailInviata, true);
-  assert.match(xml, /<Numero>1\/2026<\/Numero>/);
+  assert.equal(fattura.numero, '1/' + annoCorrente);
+  assert.ok(xml.includes('<Numero>1/' + annoCorrente + '</Numero>'));
   assert.match(xml, /<RegimeFiscale>RF19<\/RegimeFiscale>/);
   assert.match(xml, /<Natura>N2\.2<\/Natura>/);
   assert.match(xml, /Legge 190\/2014/);
@@ -270,7 +312,7 @@ test('fatture: XML e PDF riportano regime, bollo, scadenza e pagamento', () => {
   assert.equal(sent.length, 1);
   assert.equal(sent[0].attachments.length, 2);
   assert.match(sent[0].body, /Totale da pagare: € 102\.00/);
-  assert.equal(invoiceRows.length, 1);
+  assert.equal(invoiceRows.length, 2);
 
   const senzaRiferimento = context.generaFatturaXML({
     adminEmail: 'admin@example.it', password: 'pw', tipoCliente: 'socio', email: 'mario@example.it',
@@ -286,6 +328,8 @@ test('fatture: XML e PDF riportano regime, bollo, scadenza e pagamento', () => {
   };
   const fatturaSoglia = context.generaFatturaXML({ ...datiBase, numero: '3/2026', importo: '77.47' });
   const xmlSoglia = Buffer.from(fatturaSoglia.xmlBase64.split(',')[1], 'base64').toString();
+  assert.equal(fatturaSoglia.numero, '2/' + annoCorrente);
+  assert.ok(xmlSoglia.includes('<Numero>2/' + annoCorrente + '</Numero>'));
   assert.match(xmlSoglia, /<Natura>N4<\/Natura>/);
   assert.match(xmlSoglia, /Articolo 4 &amp; normativa/);
   assert.doesNotMatch(xmlSoglia, /<DatiBollo>/);
@@ -293,6 +337,7 @@ test('fatture: XML e PDF riportano regime, bollo, scadenza e pagamento', () => {
 
   const fatturaOltreSoglia = context.generaFatturaXML({ ...datiBase, numero: '4/2026', importo: '77.48' });
   const xmlOltreSoglia = Buffer.from(fatturaOltreSoglia.xmlBase64.split(',')[1], 'base64').toString();
+  assert.equal(fatturaOltreSoglia.numero, '3/' + annoCorrente);
   assert.match(xmlOltreSoglia, /<DatiBollo><BolloVirtuale>SI<\/BolloVirtuale><ImportoBollo>2\.00<\/ImportoBollo><\/DatiBollo>/);
   assert.match(xmlOltreSoglia, /<ImportoTotaleDocumento>79\.48<\/ImportoTotaleDocumento>/);
 });

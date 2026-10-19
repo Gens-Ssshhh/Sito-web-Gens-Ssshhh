@@ -14,37 +14,44 @@ function escapeHtmlFattura_(value) {
 
 function exportBilancioExcel(email, anno) {
   var user = getDatiUtente(email);
-  if (!["PRESIDENTE", "SEGRETARIO", "TESORIERE"].includes(user.ruolo.toUpperCase())) return "NO_AUTH";
+  if (!user || !isRuoloAmministrativo(user.ruolo)) return "NO_AUTH";
 
-  var ss = SpreadsheetApp.openById("1zYVY0g8nIASjbzIKlHtVbaoEhk5949ctqQemVENfSow");
+  var ss = SpreadsheetApp.openById(ID_FOGLIO_CONTABILITA);
   var sheet = ss.getSheetByName("bilancio");
+  if (!sheet) throw new Error("Foglio 'bilancio' non trovato.");
   var dati = sheet.getDataRange().getValues();
 
   // Costruiamo un CSV con separatore punto e virgola (standard Excel Italia)
-  var csvContent = "Data;N. Doc;Descrizione;Conto Dare;Conto Avere;Importo;Controparte;CF/PIVA;Attivita\n";
+  var csvContent = "\uFEFFData;N. Doc;Descrizione;Conto Dare;Conto Avere;Importo;Controparte;CF/PIVA;Attivita\n";
+
+  function campoCSV(valore) {
+    var testo = String(valore == null ? "" : valore).replace(/"/g, '""');
+    return /[;"\r\n]/.test(testo) ? '"' + testo + '"' : testo;
+  }
 
   for (var i = 1; i < dati.length; i++) {
     var r = dati[i];
-    var d = new Date(r[0]);
+    var d = r[0] instanceof Date ? r[0] : new Date(r[0]);
+    if (isNaN(d.getTime())) continue;
     // Filtro per anno (se specificato)
     if (anno && d.getFullYear() != anno) continue;
 
     var dataFmt = Utilities.formatDate(d, "Europe/Rome", "dd/MM/yyyy");
-    var importo = r[4].toString().replace(".", ","); // Formato Italiano 10,50
+    var importoNumero = Number(r[4]);
+    var importo = r[4] == null || r[4] === "" ? "" :
+      (isFinite(importoNumero) ? importoNumero.toFixed(2).replace(".", ",") : String(r[4]).replace(".", ","));
 
-    // Gestione vecchi dati vs nuovi dati
-    // Nuovi: 0=Data, 1=Desc, 2=Dare, 3=Avere, 4=Imp, 5=Contr, 6=CF, 7=Tipo, 8=Doc
     var rigaCSV = [
       dataFmt,
-      r[8] || "",       // N. Doc
-      r[1] || "",       // Descrizione
-      r[2] || "",       // Dare
-      r[3] || "",       // Avere
+      r[8] || "",
+      r[1] || "",
+      r[2] || "",
+      r[3] || "",
       importo,
-      r[5] || "",       // Controparte
-      r[6] || "",       // CF/PIVA
-      r[7] || "Ist"     // Tipo
-    ].join(";");
+      r[5] || "",
+      r[6] || "",
+      r[7] || "Ist"
+    ].map(campoCSV).join(";");
 
     csvContent += rigaCSV + "\n";
   }
@@ -452,14 +459,45 @@ function inviaFatturaSocio_(dati, nomeSocio, allegatoPdf, allegatoXml) {
   return true;
 }
 
+function prossimoNumeroFattura_(foglioEmesse, anno) {
+  var righe = foglioEmesse.getDataRange().getValues();
+  var massimo = 0;
+  righe.forEach(function (riga) {
+    var match = /^(\d+)(?:\/(\d{4}))?$/.exec(String(riga[1] || "").trim());
+    if (!match) return;
+    var annoRiga = match[2] || "";
+    if (!annoRiga) {
+      var dataRiga = riga[0];
+      if (dataRiga instanceof Date) {
+        annoRiga = Utilities.formatDate(dataRiga, "Europe/Rome", "yyyy");
+      } else {
+        var dataMatch = String(dataRiga || "").match(/\d{2}\/\d{2}\/(\d{4})/);
+        annoRiga = dataMatch ? dataMatch[1] : "";
+      }
+    }
+    if (annoRiga === anno) massimo = Math.max(massimo, Number(match[1]));
+  });
+  return (massimo + 1) + "/" + anno;
+}
+
 function generaFatturaXML(datiInput) {
   datiInput = datiInput || {};
   var admin = getDatiUtente(datiInput.adminEmail);
   if (!admin || !isRuoloAmministrativo(admin.ruolo) || verificaLogin({ email: datiInput.adminEmail, password: datiInput.password }) !== "OK_LOGIN") {
     return { errore: "Non sei autorizzato a generare fatture." };
   }
-  if (!datiInput.numero || !datiInput.importo || Number(datiInput.importo) <= 0 || !datiInput.causale) {
-    return { errore: "Numero, importo positivo e causale sono obbligatori." };
+  var lock = LockService.getScriptLock();
+  lock.waitLock(30000);
+  try {
+    return generaFatturaXMLConLock_(datiInput);
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+function generaFatturaXMLConLock_(datiInput) {
+  if (!datiInput.importo || Number(datiInput.importo) <= 0 || !datiInput.causale) {
+    return { errore: "Importo positivo e causale sono obbligatori." };
   }
   if (String(datiInput.causale).trim().length < 12) return { errore: "Inserisci una descrizione dettagliata del bene o servizio (almeno 12 caratteri)." };
   var regimeFiscale = String(datiInput.regimeFiscale || "RF01").toUpperCase();
@@ -469,7 +507,7 @@ function generaFatturaXML(datiInput) {
     ? "Operazione in franchigia da IVA ai sensi della Legge 190/2014 e successive modificazioni"
     : String(datiInput.riferimentoIVA || "").trim();
   if (!notaIva) return { errore: "Per RF01 inserisci il riferimento normativo esatto per l’IVA a zero." };
-  var metodiPagamento = ["BONIFICO", "PAYPAL", "SATISPAY", "CONTANTI"];
+  var metodiPagamento = ["BONIFICO", "PAYPAL", "CONTANTI"];
   var metodoPagamento = String(datiInput.metodoPagamento || "BONIFICO").toUpperCase();
   if (metodiPagamento.indexOf(metodoPagamento) < 0 || !String(datiInput.datiPagamento || "").trim()) {
     return { errore: "Inserisci un metodo e i relativi dati di pagamento." };
@@ -479,6 +517,9 @@ function generaFatturaXML(datiInput) {
   // --- LE TUE CONNESSIONI ---
   var idArchivioEsterno = "1zYVYOg8nlASjbzIKIHtVbaoEhK5949ctqQemVENfSow";
   var idCartellaDrive = "1NdZ2w4kU2WuYIj9wtA9rz3ITz08ViZje";
+  var ssArchivio = SpreadsheetApp.openById(idArchivioEsterno);
+  var foglioEmesse = ssArchivio.getSheetByName("Fatture Emesse");
+  if (!foglioEmesse) return { errore: "Archivio fatture non disponibile: impossibile assegnare un numero progressivo." };
 
   // Dati Associazione
   var ass_piva = "01234567890";
@@ -583,8 +624,7 @@ function generaFatturaXML(datiInput) {
   var oggiFormatoXML = Utilities.formatDate(dataOdierna, "Europe/Rome", "yyyy-MM-dd");
   var oggiFormatoPDF = Utilities.formatDate(dataOdierna, "Europe/Rome", "dd/MM/yyyy");
   var annoFattura = Utilities.formatDate(dataOdierna, "Europe/Rome", "yyyy");
-  datiInput.numero = String(datiInput.numero).trim();
-  if (datiInput.numero.indexOf("/") < 0) datiInput.numero += "/" + annoFattura;
+  datiInput.numero = prossimoNumeroFattura_(foglioEmesse, annoFattura);
   var dataScadenzaPagamento = new Date(String(datiInput.scadenzaPagamento) + "T12:00:00");
   if (isNaN(dataScadenzaPagamento.getTime())) return { errore: "La data di scadenza non è valida." };
   var scadenzaPagamentoFmt = Utilities.formatDate(dataScadenzaPagamento, "Europe/Rome", "dd/MM/yyyy");
@@ -608,7 +648,7 @@ function generaFatturaXML(datiInput) {
   var xmlBollo = impostaBollo > 0
     ? "<DatiBollo><BolloVirtuale>SI</BolloVirtuale><ImportoBollo>" + bolloFmt + "</ImportoBollo></DatiBollo>"
     : "";
-  var modalitaPagamentoXML = { BONIFICO: "MP05", CONTANTI: "MP01", PAYPAL: "MP24", SATISPAY: "MP08" }[metodoPagamento];
+  var modalitaPagamentoXML = { BONIFICO: "MP05", CONTANTI: "MP01", PAYPAL: "MP24" }[metodoPagamento];
   var ibanPagamento = metodoPagamento === "BONIFICO"
     ? datiInput.datiPagamento.replace(/\s/g, "").toUpperCase()
     : "";
@@ -743,8 +783,6 @@ function generaFatturaXML(datiInput) {
     urlPdfDrive = cartella.createFile(blobPdf).getUrl();
 
     // Registra riga nel Foglio Excel
-    var ssArchivio = SpreadsheetApp.openById(idArchivioEsterno);
-    var foglioEmesse = ssArchivio.getSheetByName("Fatture Emesse");
     var timestamp = Utilities.formatDate(dataOdierna, "Europe/Rome", "dd/MM/yyyy HH:mm:ss");
     var tipoClienteLeggibile = datiInput.tipoCliente === "socio" ? "Privato/Socio" : "Azienda/Esterno";
 
@@ -780,7 +818,7 @@ function generaFatturaXML(datiInput) {
     ]);
   } catch (e) {
     console.log("Errore Drive/Fogli: " + e);
-    // Se fallisce Drive (es cartella inesistente), il PDF generato esisterà comunque in memoria per il download!
+    return { errore: "Fattura non registrata nell'archivio. Verifica la connessione e riprova." };
   }
 
   // Se per qualche motivo il PDF non si è creato su Drive, forziamo la creazione per il download
@@ -805,6 +843,7 @@ function generaFatturaXML(datiInput) {
   // Restituiamo ENTRAMBI i file convertiti in Base64 (stringa) al browser
   return {
     errore: null,
+    numero: datiInput.numero,
     xmlBase64: "data:text/xml;base64," + Utilities.base64Encode(xmlString),
     pdfBase64: "data:application/pdf;base64," + Utilities.base64Encode(blobPdf.getBytes()),
     emailInviata: emailInviata,

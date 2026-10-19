@@ -807,6 +807,70 @@ function sociAttiviProposteEvento_() {
   });
 }
 
+function inviaPromemoriaVotoPropostaEvento(emailCreatore, propostaId) {
+  var email = String(emailCreatore || '').trim().toLowerCase();
+  if (!verificaSocioEvento_(email)) return { ok: false, messaggio: 'Solo i soci attivi possono inviare promemoria.' };
+
+  var rows = getFoglioProposteEventi_().getDataRange().getValues();
+  var rowIndex = rows.findIndex(function (row, index) {
+    return index > 0 && String(row[0]) === String(propostaId);
+  });
+  if (rowIndex < 1) return { ok: false, messaggio: 'Proposta non trovata.' };
+
+  var row = rows[rowIndex];
+  if (String(row[2] || '').trim().toLowerCase() !== email) {
+    return { ok: false, messaggio: 'Solo chi ha creato la proposta può inviare il promemoria.' };
+  }
+  if (String(row[7] || 'ATTIVA') !== 'ATTIVA') {
+    return { ok: false, messaggio: 'La proposta non è più aperta al voto.' };
+  }
+
+  var opzioni = [];
+  try { opzioni = JSON.parse(row[5] || '[]'); } catch (e) { }
+  var votanti = leggiVotiEvento_(row[6], opzioni, '').votanti;
+  var senzaVoto = sociAttiviProposteEvento_().filter(function (socio) {
+    return votanti['socio:' + socio] === undefined && votanti[socio] === undefined;
+  });
+  var destinatari = filtraDestinatariNotifica_(senzaVoto, 'evento_promemoria', 'email');
+  if (!destinatari.length) return { ok: true, inviati: 0 };
+
+  var titolo = String(row[3] || 'Evento proposto').replace(/[\r\n]+/g, ' ').trim();
+  var titoloHtml = escapeHtmlEvento_(titolo);
+  var url = 'https://Gens-Ssshhh.github.io/Sito-web-Gens-Ssshhh/index.html';
+  var subject = 'Il tuo voto conta: ' + titolo;
+  var body = 'Ciao,\n\nla proposta "' + titolo + '" è ancora aperta e non risulta una tua risposta. ' +
+    'Il tuo parere è importante: accedi al portale soci e partecipa alla scelta.\n\n' +
+    'Accedi al portale: ' + url + '\n\nA presto,\nGens Ssshhh';
+  var htmlBody = '<div style="margin:0;padding:32px 12px;background:#f2f5f9;font-family:Arial,Helvetica,sans-serif;color:#243247">' +
+    '<table role="presentation" cellpadding="0" cellspacing="0" width="100%" style="max-width:600px;margin:0 auto;background:#ffffff;border-radius:16px;overflow:hidden;border:1px solid #e3e9f0">' +
+    '<tr><td style="padding:26px 32px;background:#1d2e4a;color:#ffffff">' +
+    '<div style="font-size:12px;letter-spacing:2px;font-weight:bold">GENS SSSSHHH</div>' +
+    '<div style="margin-top:7px;font-size:13px;color:#d9e3f2">Comunità · Proposte ed eventi</div></td></tr>' +
+    '<tr><td style="padding:34px 32px 20px">' +
+    '<div style="display:inline-block;padding:6px 10px;border-radius:20px;background:#edf4ff;color:#315d94;font-size:11px;font-weight:bold;letter-spacing:1px">VOTAZIONE APERTA</div>' +
+    '<h1 style="margin:18px 0 12px;font-size:26px;line-height:1.25;color:#1d2e4a">La tua voce conta</h1>' +
+    '<p style="margin:0 0 20px;font-size:15px;line-height:1.7;color:#536176">Ciao, non risulta ancora una tua risposta alla proposta. Bastano pochi istanti per esprimere il tuo parere e aiutare la comunità a scegliere.</p>' +
+    '<div style="margin:0 0 26px;padding:17px 19px;border-left:4px solid #3f72ad;border-radius:6px;background:#f5f8fc">' +
+    '<div style="margin-bottom:6px;font-size:11px;font-weight:bold;letter-spacing:1px;color:#75849a">PROPOSTA</div>' +
+    '<div style="font-size:18px;line-height:1.4;font-weight:bold;color:#1d2e4a">' + titoloHtml + '</div></div>' +
+    '<div style="text-align:center;padding:4px 0 18px"><a href="' + url + '" style="display:inline-block;padding:15px 28px;border-radius:8px;background:#1d2e4a;color:#ffffff;text-decoration:none;font-size:15px;font-weight:bold">Accedi al portale e vota</a></div>' +
+    '<p style="margin:0;font-size:13px;line-height:1.6;color:#75849a;text-align:center">Accedi con il tuo account e apri il calendario per rispondere alla proposta.</p>' +
+    '</td></tr><tr><td style="padding:20px 32px;border-top:1px solid #edf0f4;background:#fbfcfe;font-size:12px;line-height:1.6;color:#8490a0;text-align:center">Hai già votato? Puoi ignorare questo messaggio.<br>Gens Ssshhh · Insieme, con la voce di tutti.</td></tr>' +
+    '</table></div>';
+
+  for (var inizio = 0; inizio < destinatari.length; inizio += 40) {
+    MailApp.sendEmail({
+      to: 'undisclosed-recipients@gmail.com',
+      bcc: destinatari.slice(inizio, inizio + 40).join(','),
+      subject: subject,
+      body: body,
+      htmlBody: htmlBody,
+      name: 'Gens Ssshhh'
+    });
+  }
+  return { ok: true, inviati: destinatari.length };
+}
+
 function escapeHtmlEvento_(valore) {
   return String(valore == null ? '' : valore).replace(/[&<>"']/g, function (carattere) {
     return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[carattere];

@@ -1540,23 +1540,84 @@ function caricaNotifiche() {
     });
 }
 
+function chiaveNotificaLette_() {
+    return 'gens_notifiche_lette_' + String(curEmail || '').toLowerCase();
+}
+
+function leggiNotificheLette_() {
+    var salvate = localStorage.getItem(chiaveNotificaLette_());
+    if (!salvate) return [];
+    try {
+        var chiavi = JSON.parse(salvate);
+        if (Array.isArray(chiavi)) return chiavi;
+        throw new Error('Formato delle notifiche lette non valido');
+    } catch (error) {
+        console.error('Impossibile leggere le notifiche già lette:', error);
+        return [];
+    }
+}
+
+function chiaveNotifica_(notifica) {
+    if (notifica.id !== undefined && notifica.id !== null) return String(notifica.id);
+    return JSON.stringify([
+        notifica.tipo || 'info',
+        notifica.titolo || '',
+        notifica.testo || '',
+        notifica.data || '',
+        notifica.viewId || ''
+    ]);
+}
+
+function segnaNotificaLetta(event) {
+    segnaNotificaLettaElemento(event.currentTarget);
+}
+
+function segnaNotificaLettaElemento(elemento) {
+    if (!elemento || elemento.classList.contains('is-read')) return;
+    var chiave = elemento.dataset.notificationKey;
+    if (!chiave) return;
+
+    var chiaviLette = leggiNotificheLette_();
+    if (chiaviLette.indexOf(chiave) === -1) {
+        chiaviLette.push(chiave);
+        try {
+            localStorage.setItem(chiaveNotificaLette_(), JSON.stringify(chiaviLette));
+        } catch (error) {
+            console.error('Impossibile salvare la notifica come letta:', error);
+        }
+    }
+
+    elemento.classList.add('is-read');
+    var count = document.getElementById('notificationCount');
+    var nonLette = document.querySelectorAll('#notificationList .notification-item:not(.is-read)').length;
+    count.innerText = nonLette;
+    count.classList.toggle('hidden', nonLette === 0);
+}
+
 function renderNotifiche(notifiche) {
     var lista = document.getElementById('notificationList');
     var count = document.getElementById('notificationCount');
     if (!lista || !count) return;
-    count.innerText = notifiche.length;
-    count.classList.toggle('hidden', notifiche.length === 0);
+    var chiaviLette = leggiNotificheLette_();
     if (!notifiche.length) {
+        count.innerText = 0;
+        count.classList.add('hidden');
         lista.innerHTML = '<p class="notification-empty">Nessuna notifica.</p>';
         return;
     }
+    var nonLette = 0;
     lista.innerHTML = notifiche.map(function (notifica) {
         var tipo = /^(error|warning|info|action)$/.test(notifica.tipo || '') ? notifica.tipo : 'info';
+        var chiave = chiaveNotifica_(notifica);
+        var letta = chiaviLette.indexOf(chiave) !== -1;
+        if (!letta) nonLette++;
         var azione = notifica.viewId === 'viewCalendario'
-            ? '<button type="button" class="notification-open-action" onclick="chiudiNotifiche(event);nav(\'viewCalendario\')">Apri calendario</button>'
+            ? '<button type="button" class="notification-open-action" onclick="segnaNotificaLettaElemento(this.closest(\'.notification-item\'));chiudiNotifiche(event);nav(\'viewCalendario\')">Apri calendario</button>'
             : '';
-        return `<article class="notification-item notification-${tipo}"><strong>${escapeActionCenterText(notifica.titolo || '')}</strong><p>${escapeActionCenterText(notifica.testo || '')}</p>${azione}</article>`;
+        return `<article class="notification-item notification-${tipo}${letta ? ' is-read' : ''}" data-notification-key="${escapeActionCenterText(chiave)}" onclick="segnaNotificaLetta(event)"><strong>${escapeActionCenterText(notifica.titolo || '')}</strong><p>${escapeActionCenterText(notifica.testo || '')}</p>${azione}</article>`;
     }).join('');
+    count.innerText = nonLette;
+    count.classList.toggle('hidden', nonLette === 0);
 }
 
 function toggleNotifiche(event) {
@@ -5390,6 +5451,24 @@ function etichettaDataEvento_(testo) {
     return giorno ? giorno + ' ' + testo : (testo || '');
 }
 
+function istanteOpzioneEvento_(opzione) {
+    var data = parseDataEvento_(opzione.data);
+    if (!data) return Number.MAX_SAFE_INTEGER;
+    var ora = /^(\d{2}):(\d{2})$/.exec(String(opzione.ora || '').trim());
+    if (ora) data.setHours(Number(ora[1]), Number(ora[2]), 0, 0);
+    return data.getTime();
+}
+
+function indiciOpzioniCronologiche_(opzioni) {
+    return opzioni.map(function (opzione, indice) {
+        return { indice: indice, istante: istanteOpzioneEvento_(opzione) };
+    }).sort(function (a, b) {
+        return a.istante - b.istante || a.indice - b.indice;
+    }).map(function (voce) {
+        return voce.indice;
+    });
+}
+
 function htmlCampoDataEvento_(attributi, valore) {
     return '<div class="event-date-field">' +
         '<input type="text" ' + attributi + ' inputmode="numeric" maxlength="10" placeholder="dd/mm/aaaa" value="' + escapeTestoEvento(valore || '') + '">' +
@@ -5626,7 +5705,8 @@ function renderProposteEventi(proposte) {
             ? mioVoto.opzioni.map(Number).filter(function (indice) { return Number.isInteger(indice) && indice >= 0 && indice < opzioni.length; })
             : [];
         var miaScelta = mioVoto ? (mioVoto.interesse === 'no' ? 'no' : 'si') : '';
-        var opzioniHtml = opzioni.map(function (opzione, indice) {
+        var opzioniHtml = indiciOpzioniCronologiche_(opzioni).map(function (indice) {
+            var opzione = opzioni[indice];
             var selezionata = miePreferenze.indexOf(indice) !== -1 ? ' checked' : '';
             return '<label class="event-vote-option' + (selezionata ? ' is-selected' : '') + '"><input type="checkbox" data-role="preferenza" value="' + indice + '"' + selezionata + '>' +
                 '<span><strong>' + escapeTestoEvento(etichettaDataEvento_(opzione.data) || 'Data da definire') + ' · ' + escapeTestoEvento(opzione.ora || 'Ora da definire') +
@@ -5672,6 +5752,7 @@ function renderProposteEventi(proposte) {
             '<div class="event-card-menu-items"><button type="button" class="event-share-link">Condividi con esterni</button>';
         var editorCreatore = '';
         if (proposta.creatore) {
+            toolsHtml += '<button type="button" class="event-remind-voters">Ricorda di votare</button>';
             toolsHtml += '<button type="button" class="event-cancel-proposal">Elimina proposta</button>';
             editorCreatore = '<details class="event-management-details"><summary>⚙️ Gestisci proposta</summary><div class="event-management-content">' + confermaHtml +
                 '<details class="event-edit-details"><summary>Modifica proposta</summary>' +
@@ -5817,6 +5898,11 @@ function renderProposteEventi(proposte) {
             annullaPropostaEvento(button.closest('.event-proposal-card').getAttribute('data-proposal-id'));
         });
     });
+    list.querySelectorAll('.event-remind-voters').forEach(function (button) {
+        button.addEventListener('click', function () {
+            inviaPromemoriaVotoPropostaEvento_(button.closest('.event-proposal-card').getAttribute('data-proposal-id'), button);
+        });
+    });
     list.querySelectorAll('.event-refill-banner').forEach(function (banner) {
         banner.querySelector('.event-refill-no').addEventListener('click', function (event) {
             rispondiRichiestaRicompilazioneEvento(banner.getAttribute('data-event-id'), false, event.currentTarget);
@@ -5829,6 +5915,24 @@ function renderProposteEventi(proposte) {
             aggiungiOpzioneVotoEvento(card.getAttribute('data-proposal-id'), submit);
         });
     });
+}
+
+async function inviaPromemoriaVotoPropostaEvento_(propostaId, pulsante) {
+    if (!window.confirm('Inviare un promemoria email ai soci attivi che non hanno ancora votato?')) return;
+    pulsante.disabled = true;
+    var result = await chiamaServer('inviaPromemoriaVotoPropostaEvento', { propostaId: propostaId }, true).catch(function (error) {
+        showToast(error.message || 'Promemoria non inviato.', 'error');
+        return null;
+    });
+    pulsante.disabled = false;
+    if (!result || !result.ok) {
+        if (result) showToast(result.messaggio || 'Promemoria non inviato.', 'error');
+        return;
+    }
+    showToast(result.inviati
+        ? 'Promemoria inviato a ' + result.inviati + (result.inviati === 1 ? ' socio.' : ' soci.')
+        : 'Non ci sono soci da avvisare: hanno già votato o non ricevono promemoria email.',
+    result.inviati ? 'success' : 'info');
 }
 
 function leggiNuovaOpzioneEvento_(contenitore) {
@@ -6069,9 +6173,10 @@ async function apriVotoPubblicoEvento(propostaId, tokenModifica) {
         return;
     }
 
-    var preferenze = (proposta.opzioni || []).map(function (opzione, indice) {
+    var opzioniPubbliche = proposta.opzioni || [];
+    var preferenze = indiciOpzioniCronologiche_(opzioniPubbliche).map(function (indice) {
         var conteggio = proposta.voti && proposta.voti.opzioni ? Number(proposta.voti.opzioni[indice] || 0) : 0;
-        return htmlPreferenzaPubblicaEvento_(opzione, indice, conteggio, false);
+        return htmlPreferenzaPubblicaEvento_(opzioniPubbliche[indice], indice, conteggio, false);
     }).join('');
     var interesse = proposta.voti && proposta.voti.interesse || { si: 0, no: 0 };
     contenuto.innerHTML = '<span class="section-kicker">Proposta evento</span><h1>' + escapeTestoEvento(proposta.titolo) + '</h1>' +
@@ -6142,7 +6247,7 @@ async function apriVotoPubblicoEvento(propostaId, tokenModifica) {
 }
 
 function htmlPreferenzaPubblicaEvento_(opzione, indice, conteggio, selezionata) {
-    return '<label class="event-vote-option"><input type="checkbox" data-role="preferenza" value="' + indice + '"' + (selezionata ? ' checked' : '') + '>' +
+    return '<label class="event-vote-option" data-istante="' + istanteOpzioneEvento_(opzione) + '"><input type="checkbox" data-role="preferenza" value="' + indice + '"' + (selezionata ? ' checked' : '') + '>' +
         '<span><strong>' + escapeTestoEvento(etichettaDataEvento_(opzione.data) || 'Data da definire') + ' · ' + escapeTestoEvento(opzione.ora || 'Ora da definire') +
         '</strong><small>' + escapeTestoEvento(opzione.luogo || 'Luogo non specificato') + ' · ' + conteggio + ' preferenze</small></span></label>';
 }
@@ -6203,7 +6308,14 @@ async function aggiungiOpzionePubblicaEvento(form, pulsante) {
         return;
     }
 
-    form.querySelector('.event-preferences').insertAdjacentHTML('beforeend', htmlPreferenzaPubblicaEvento_(result.opzione, result.indice, 0, true));
+    var contenitorePreferenze = form.querySelector('.event-preferences');
+    var istanteNuova = istanteOpzioneEvento_(result.opzione);
+    var successiva = Array.prototype.find.call(contenitorePreferenze.querySelectorAll('.event-vote-option'), function (etichetta) {
+        return Number(etichetta.getAttribute('data-istante')) > istanteNuova;
+    });
+    var nuovaPreferenzaHtml = htmlPreferenzaPubblicaEvento_(result.opzione, result.indice, 0, true);
+    if (successiva) successiva.insertAdjacentHTML('beforebegin', nuovaPreferenzaHtml);
+    else contenitorePreferenze.insertAdjacentHTML('beforeend', nuovaPreferenzaHtml);
     form.querySelector('.event-preference-details').open = true;
     form.querySelector('[data-role="nuova-data"]').value = '';
     form.querySelector('[data-role="nuova-ora"]').value = '';

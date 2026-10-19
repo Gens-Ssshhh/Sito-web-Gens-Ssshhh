@@ -40,7 +40,7 @@ var AZIONI_API_CONSENTITE = [
   "getReportStorici", "getConfigurazioneNotificheGlobali", "salvaConfigurazioneNotificheGlobali", "ripristinaPreferenzeNotifiche", "salvaPreferenzeNotifiche", "getRichiesteFirmaUtente", "getRichiesteIscrizioneDaAvvallare",
   "getRispostaRicompilazioneOspite", "getRisultatiLive", "getSociPerFattura",
   "getStartData", "getStoricoFirmeUtente", "inviaCandidatura", "inviaLinkReset",
-  "inviaRichiestaDimissioni", "login", "logout", "modificaPropostaEvento",
+  "inviaPromemoriaVotoPropostaEvento", "inviaRichiestaDimissioni", "login", "logout", "modificaPropostaEvento",
   "ottieniUrlVerbale", "proponiNuovoSocio", "registraAccettazioneRegolamento",
   "registraMovimentoCompostoServer", "registraTokenPush", "requestSignOTP",
   "riceviVoto", "riceviVotoCampagna", "richiediIscrizioneSocio",
@@ -224,6 +224,15 @@ function doPost(e) {
         var risultatoVoto = votaPropostaEvento(payloadVoto.email || richiesta.email || "", payloadVoto.propostaId || payloadVoto.id, payloadVoto.risposta || payloadVoto.voto || payloadVoto);
       }
       return ContentService.createTextOutput(JSON.stringify({ status: "SUCCESS", data: risultatoVoto })).setMimeType(ContentService.MimeType.JSON);
+    }
+
+    if (azione === "inviaPromemoriaVotoPropostaEvento") {
+      var payloadPromemoria = richiesta.payload;
+      var idPropostaPromemoria = payloadPromemoria && typeof payloadPromemoria === "object"
+        ? payloadPromemoria.propostaId || payloadPromemoria.id
+        : payloadPromemoria;
+      var risultatoPromemoria = inviaPromemoriaVotoPropostaEvento(emailSessione, idPropostaPromemoria);
+      return ContentService.createTextOutput(JSON.stringify({ status: "SUCCESS", data: risultatoPromemoria })).setMimeType(ContentService.MimeType.JSON);
     }
 
     if (azione === "processaScadenzeAmmissioni" || azione === "configuraNotificheCaricheIstituzionali" || azione === "gestisciModificaCaricaIstituzionale") {

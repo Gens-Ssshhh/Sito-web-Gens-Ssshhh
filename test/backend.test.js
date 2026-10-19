@@ -661,6 +661,50 @@ test('eventi: dopo 72 ore ricorda solo i soci senza voto una sola volta', () => 
   assert.ok(eventiRows[1][10]);
 });
 
+test('eventi: il creatore invia promemoria email solo ai soci attivi non votanti', () => {
+  const sociSheet = dataSheet([
+    ['Nome', 'Password', 'Email', 'Stato Socio'],
+    ['Mario', 'hash', 'mario@example.it', 'ATTIVO'],
+    ['Anna', 'hash', 'anna@example.it', 'ATTIVO'],
+    ['Luca', 'hash', 'luca@example.it', 'ATTIVO'],
+    ['Paolo', 'hash', 'paolo@example.it', 'NON ATTIVO']
+  ]);
+  const voti = {
+    _votanti: {
+      'socio:mario@example.it': { interesse: 'si', opzioni: [0] },
+      'socio:luca@example.it': { interesse: 'no', opzioni: [] }
+    }
+  };
+  const eventiRows = [
+    ['ID', 'CreatoIl', 'CreatoreEmail', 'Titolo', 'Descrizione', 'OpzioniJson', 'VotiJson', 'Stato'],
+    ['evento-manuale', new Date(), 'mario@example.it', 'Cena & assemblea', '', '[{"data":"10/11/2026","ora":"20:00"}]', JSON.stringify(voti), 'ATTIVA']
+  ];
+  const eventiSheet = dataSheet(eventiRows);
+  const emails = [];
+  const properties = new Map();
+  const context = {
+    SpreadsheetApp: { getActiveSpreadsheet: () => ({ getSheetByName: name => name === 'soci' ? sociSheet : name === 'ProposteEventi' ? eventiSheet : null }) },
+    PropertiesService: { getScriptProperties: () => ({
+      getProperty: key => properties.get(key) || null,
+      setProperty: (key, value) => properties.set(key, value)
+    }) },
+    MailApp: { sendEmail: message => emails.push(message) }
+  };
+  loadScript('Eventi.js', context);
+
+  const risultato = context.inviaPromemoriaVotoPropostaEvento('mario@example.it', 'evento-manuale');
+
+  assert.deepEqual(JSON.parse(JSON.stringify(risultato)), { ok: true, inviati: 1 });
+  assert.equal(emails.length, 1);
+  assert.equal(emails[0].bcc, 'anna@example.it');
+  assert.match(emails[0].htmlBody, /Cena &amp; assemblea/);
+  assert.match(emails[0].htmlBody, /Accedi al portale e vota/);
+  assert.match(emails[0].htmlBody, /href="https:\/\/Gens-Ssshhh\.github\.io\/Sito-web-Gens-Ssshhh\/index\.html"/);
+  assert.equal(context.inviaPromemoriaVotoPropostaEvento('anna@example.it', 'evento-manuale').ok, false);
+  assert.equal(context.inviaPromemoriaVotoPropostaEvento('mario@example.it', 'inesistente').ok, false);
+  assert.equal(emails.length, 1);
+});
+
 test('notifiche: mostra avviso evento subito e promemoria dopo 72 ore finché non vota', () => {
   const sociSheet = dataSheet([
     ['Nome', 'Password', 'Email', 'Stato Socio'],
@@ -1503,6 +1547,7 @@ test('api: crea sessioni dopo il login e vincola le azioni admin all’identità
   const cacheValues = new Map();
   const properties = new Map();
   let updatePayload = null;
+  let promemoriaPayload = null;
   let datiUtenteRichiesti = null;
   let tokenCounter = 0;
   const context = {
@@ -1531,7 +1576,11 @@ test('api: crea sessioni dopo il login e vincola le azioni admin all’identità
         deleteProperty: key => properties.delete(key)
       })
     },
-    adminUpdateSocio: dati => { updatePayload = dati; return 'OK'; }
+    adminUpdateSocio: dati => { updatePayload = dati; return 'OK'; },
+    inviaPromemoriaVotoPropostaEvento: (email, propostaId) => {
+      promemoriaPayload = { email, propostaId };
+      return { ok: true, inviati: 1 };
+    }
   };
   loadScript('NotificationPrefs.js', context);
   loadScript('main.js', context);
@@ -1564,6 +1613,13 @@ test('api: crea sessioni dopo il login e vincola le azioni admin all’identità
   assert.equal(datiUtenteRichiesti, 'admin@example.it');
 
   const memberLogin = rispostaEndpoint({ azione: 'login', email: 'member@example.it', password: 'pw' });
+  const promemoria = rispostaEndpoint({
+    azione: 'inviaPromemoriaVotoPropostaEvento',
+    token: memberLogin.token,
+    payload: { email: 'admin@example.it', propostaId: 'evento-1' }
+  });
+  assert.equal(promemoria.status, 'SUCCESS');
+  assert.deepEqual(promemoriaPayload, { email: 'member@example.it', propostaId: 'evento-1' });
   const forbidden = rispostaEndpoint({
     azione: 'adminUpdateSocio',
     token: memberLogin.token,

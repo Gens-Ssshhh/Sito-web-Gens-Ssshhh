@@ -1973,6 +1973,11 @@ textarea {
 .notification-item {
   padding: 13px 16px;
   border-bottom: 1px solid rgba(26, 41, 69, 0.07);
+  cursor: pointer;
+}
+
+.notification-item.is-read {
+  opacity: 0.62;
 }
 
 .notification-item strong {

@@ -5506,13 +5506,16 @@ function escapeTestoEvento(valore) {
     });
 }
 
-function htmlFormVotoEvento_(id, opzioniHtml, miaScelta, preferenzeAperte) {
-    return '<div class="event-vote-form" data-event-id="' + id + '">' +
+function htmlFormVotoEvento_(id, opzioniHtml, miaScelta) {
+    return '<div class="event-vote-form" data-event-id="' + id + '" data-has-vote="' + (miaScelta ? 'true' : 'false') + '"' +
+        (miaScelta ? ' data-selected-interest="' + miaScelta + '"' : '') + '>' +
+        '<details class="event-preference-details" open><summary>Date e orari preferiti</summary>' +
+        '<div class="event-preferences"><strong>Quali date e orari preferisci?</strong>' + opzioniHtml + '</div></details>' +
         '<div class="event-vote-actions" aria-label="Rispondi alla proposta">' +
-        '<button type="button" class="event-vote-choice event-vote-yes' + (miaScelta === 'si' ? ' is-selected' : '') + '" data-choice="si">👍 Sì, partecipo</button>' +
-        '<button type="button" class="event-vote-choice event-vote-no' + (miaScelta === 'no' ? ' is-selected' : '') + '" data-choice="no">No</button></div>' +
-        '<details class="event-preference-details"' + (preferenzeAperte ? ' open' : '') + '><summary>Date e orari preferiti</summary>' +
-        '<div class="event-preferences"><strong>Quali date e orari preferisci?</strong>' + opzioniHtml + '</div></details></div>';
+        '<button type="button" class="event-vote-choice event-vote-yes' + (miaScelta === 'si' ? ' is-selected' : '') + '" data-choice="si" aria-pressed="' + (miaScelta === 'si' ? 'true' : 'false') + '">👍 Sì, partecipo</button>' +
+        '<button type="button" class="event-vote-choice event-vote-no' + (miaScelta === 'no' ? ' is-selected' : '') + '" data-choice="no" aria-pressed="' + (miaScelta === 'no' ? 'true' : 'false') + '">No</button></div>' +
+        '<button type="button" class="btn-primary event-vote-submit" ' + (miaScelta ? '' : 'disabled') + '>' +
+        (miaScelta ? 'Aggiorna risposta' : 'Invia risposta') + '</button></div>';
 }
 
 function htmlAggiungiOpzioneEvento_() {
@@ -5603,7 +5606,7 @@ function renderProposteEventi(proposte) {
         var miaScelta = mioVoto ? (mioVoto.interesse === 'no' ? 'no' : 'si') : '';
         var opzioniHtml = opzioni.map(function (opzione, indice) {
             var selezionata = miePreferenze.indexOf(indice) !== -1 ? ' checked' : '';
-            return '<label class="event-vote-option"><input type="checkbox" data-role="preferenza" value="' + indice + '"' + selezionata + '>' +
+            return '<label class="event-vote-option' + (selezionata ? ' is-selected' : '') + '"><input type="checkbox" data-role="preferenza" value="' + indice + '"' + selezionata + '>' +
                 '<span><strong>' + escapeTestoEvento(etichettaDataEvento_(opzione.data) || 'Data da definire') + ' · ' + escapeTestoEvento(opzione.ora || 'Ora da definire') +
                 '</strong><small>' + escapeTestoEvento(opzione.luogo || 'Luogo non specificato') + ' · ' + Number(preferenze[indice] || 0) + ' preferenze</small></span></label>';
         }).join('');
@@ -5613,18 +5616,18 @@ function renderProposteEventi(proposte) {
                 '<p><strong>Date, orari o luoghi sono cambiati.</strong> Le tue risposte precedenti, se ancora presenti, sono già selezionate: ricontrollale, cambiale o aggiungi nuove date.</p>' +
                 '<div class="event-refill-actions">' +
                 '<button type="button" class="btn-secondary event-refill-no">Mantieni la mia risposta</button></div></div>' +
-                htmlFormVotoEvento_(id, opzioniHtml, miaScelta, miePreferenze.length > 0);
+                htmlFormVotoEvento_(id, opzioniHtml, miaScelta);
         } else if (proposta.ricompilazioneFacoltativa) {
             votoEsistente = '<div class="event-refill-banner event-refill-optional" data-event-id="' + id + '" role="status">' +
                 '<p><strong>È stata aggiunta una nuova opzione.</strong> Il tuo voto resta valido. Se vuoi includere anche questa data, aggiorna le preferenze; altrimenti puoi mantenere la risposta attuale.</p>' +
                 '<div class="event-refill-actions">' +
                 '<button type="button" class="btn-secondary event-refill-no">Mantieni il voto attuale</button></div></div>' +
-                htmlFormVotoEvento_(id, opzioniHtml, miaScelta, miePreferenze.length > 0);
+                htmlFormVotoEvento_(id, opzioniHtml, miaScelta);
         } else if (mioVoto) {
             votoEsistente = '<p class="event-vote-confirmation" role="status">Hai già risposto a questa proposta. Puoi aggiornare la risposta: le preferenze ancora disponibili sono già selezionate.</p>' +
-                htmlFormVotoEvento_(id, opzioniHtml, miaScelta, miePreferenze.length > 0);
+                htmlFormVotoEvento_(id, opzioniHtml, miaScelta);
         } else {
-            votoEsistente = htmlFormVotoEvento_(id, opzioniHtml, '', false);
+            votoEsistente = htmlFormVotoEvento_(id, opzioniHtml, '');
         }
         var etichettaVoto = mioVoto ? 'Aggiorna voto' : 'Vota';
         var sezioneVotoHtml = '<section class="event-vote-entry">' +
@@ -5723,8 +5726,33 @@ function renderProposteEventi(proposte) {
     list.querySelectorAll('.event-vote-form').forEach(function (form) {
         form.querySelectorAll('.event-vote-choice').forEach(function (button) {
             button.addEventListener('click', function () {
-                votaPropostaEvento(form.getAttribute('data-event-id'), form, button.getAttribute('data-choice'), button);
+                var interesse = button.getAttribute('data-choice');
+                form.setAttribute('data-selected-interest', interesse);
+                form.querySelectorAll('.event-vote-choice').forEach(function (choice) {
+                    var selezionato = choice === button;
+                    choice.classList.toggle('is-selected', selezionato);
+                    choice.setAttribute('aria-pressed', selezionato ? 'true' : 'false');
+                });
+                if (interesse === 'no') {
+                    form.querySelectorAll('[data-role="preferenza"]').forEach(function (input) {
+                        input.checked = false;
+                        input.closest('.event-vote-option').classList.remove('is-selected');
+                    });
+                }
+                var submit = form.querySelector('.event-vote-submit');
+                submit.disabled = false;
+                submit.textContent = form.getAttribute('data-has-vote') === 'true' ? 'Aggiorna risposta' : 'Invia risposta';
             });
+        });
+        form.querySelectorAll('[data-role="preferenza"]').forEach(function (input) {
+            input.addEventListener('change', function () {
+                input.closest('.event-vote-option').classList.toggle('is-selected', input.checked);
+            });
+        });
+        form.querySelector('.event-vote-submit').addEventListener('click', function (event) {
+            var interesse = form.getAttribute('data-selected-interest');
+            if (!interesse) return;
+            votaPropostaEvento(form.getAttribute('data-event-id'), form, interesse, event.currentTarget);
         });
     });
     list.querySelectorAll('.event-share-link').forEach(function (button) {
@@ -5971,7 +5999,10 @@ async function votaPropostaEvento(propostaId, form, interesse, pulsante) {
     }
     var pulsantiVoto = form.querySelectorAll('.event-vote-choice');
     pulsantiVoto.forEach(function (button) { button.disabled = true; });
-    if (pulsante) pulsante.textContent = 'Registrazione...';
+    if (pulsante) {
+        pulsante.disabled = true;
+        pulsante.textContent = 'Registrazione...';
+    }
 
     var result = await chiamaServer('votaPropostaEvento', [curEmail, propostaId, { interesse: interesse, opzioni: opzioni }], true).catch(function (error) {
         showToast(error.message || 'Impossibile registrare la risposta.', 'error');
@@ -5979,13 +6010,19 @@ async function votaPropostaEvento(propostaId, form, interesse, pulsante) {
     });
     if (!result) {
         pulsantiVoto.forEach(function (button) { button.disabled = false; });
-        if (pulsante) pulsante.textContent = interesse === 'si' ? '👍 Sì, partecipo' : 'No';
+        if (pulsante) {
+            pulsante.disabled = false;
+            pulsante.textContent = form.getAttribute('data-has-vote') === 'true' ? 'Aggiorna risposta' : 'Invia risposta';
+        }
         return;
     }
     if (!result.ok) {
         showToast(messaggioErroreVotoEvento(result.messaggio), 'error');
         pulsantiVoto.forEach(function (button) { button.disabled = false; });
-        if (pulsante) pulsante.textContent = interesse === 'si' ? '👍 Sì, partecipo' : 'No';
+        if (pulsante) {
+            pulsante.disabled = false;
+            pulsante.textContent = form.getAttribute('data-has-vote') === 'true' ? 'Aggiorna risposta' : 'Invia risposta';
+        }
         return;
     }
 

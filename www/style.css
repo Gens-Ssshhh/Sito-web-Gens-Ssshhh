@@ -5334,6 +5334,73 @@ textarea {
   grid-template-columns: 1fr;
 }
 
+#viewCalendario .event-vote-form {
+  display: grid;
+  gap: 14px;
+}
+
+#viewCalendario .event-preference-details {
+  padding: 12px;
+  border: 1px solid rgba(45, 61, 82, 0.14);
+  border-radius: 12px;
+  background: #fff;
+}
+
+#viewCalendario .event-preference-details > summary {
+  width: 100%;
+  padding: 2px 0;
+}
+
+#viewCalendario .event-preferences {
+  gap: 9px;
+  margin-top: 12px;
+}
+
+#viewCalendario .event-vote-option {
+  min-height: 62px;
+  padding: 13px 14px;
+  border-color: #ded8ce;
+  background: #faf8f5;
+  transition: border-color 140ms ease, background 140ms ease, box-shadow 140ms ease;
+}
+
+#viewCalendario .event-vote-option:hover {
+  border-color: #9aa8b8;
+  background: #fff;
+}
+
+#viewCalendario .event-vote-option.is-selected {
+  border-color: #16794b;
+  background: #eef8f2;
+  box-shadow: 0 0 0 1px rgba(22, 121, 75, 0.16);
+}
+
+#viewCalendario .event-vote-option input {
+  flex: 0 0 20px;
+  width: 20px;
+  height: 20px;
+}
+
+#viewCalendario .event-vote-option strong {
+  font-size: 14px;
+  line-height: 1.4;
+}
+
+#viewCalendario .event-vote-option small {
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+#viewCalendario .event-vote-submit {
+  width: 100%;
+  min-height: 48px;
+}
+
+#viewCalendario .event-vote-submit:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
 #viewCalendario .event-vote-entry {
   padding: 16px;
   border: 1px solid rgba(45, 61, 82, 0.12);

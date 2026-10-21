@@ -5678,39 +5678,32 @@ function renderProposteEventi(proposte) {
         for (var conteggioIndice = 1; conteggioIndice < opzioni.length; conteggioIndice++) {
             if (Number(preferenze[conteggioIndice] || 0) > Number(preferenze[opzioneVincente] || 0)) opzioneVincente = conteggioIndice;
         }
-        var risultatiOrdinati = opzioni.map(function (opzione, indice) {
-            return { opzione: opzione, indice: indice, voti: Number(preferenze[indice] || 0) };
-        }).sort(function (a, b) {
-            return b.voti - a.voti || a.indice - b.indice;
-        });
-        var preferenzeMassime = risultatiOrdinati.length ? risultatiOrdinati[0].voti : 0;
-        var riepilogoOpzioniHtml = opzioni.length
-            ? '<details class="event-results-details"><summary>Risultati per data e ora</summary><p>' + Number(interesse.si || 0) + ' risposte Sì · preferenze facoltative</p><ol>' +
-            risultatiOrdinati.map(function (risultato) {
-                var classePrincipale = preferenzeMassime > 0 && risultato.voti === preferenzeMassime ? ' event-result-leading' : '';
-                var votantiOpzione = Array.isArray(proposta.votantiPerOpzione) && Array.isArray(proposta.votantiPerOpzione[risultato.indice])
-                    ? proposta.votantiPerOpzione[risultato.indice] : [];
-                var dettagliVotanti = votantiOpzione.length
-                    ? '<ul class="event-result-voters">' + votantiOpzione.map(function (nome) { return '<li>' + escapeTestoEvento(nome) + '</li>'; }).join('') + '</ul>'
-                    : '<p class="event-result-voters-empty">' + (risultato.voti > 0 ? 'Dettagli non disponibili per le preferenze espresse in precedenza.' : 'Nessuna preferenza per questa data e ora.') + '</p>';
-                return '<li class="event-result-option' + classePrincipale + '"><details><summary><span><strong>' +
-                    escapeTestoEvento(etichettaDataEvento_(risultato.opzione.data) || 'Data da definire') + ' · ' + escapeTestoEvento(risultato.opzione.ora || 'Ora da definire') +
-                    '</strong><small>' + escapeTestoEvento(risultato.opzione.luogo || 'Luogo non specificato') + '</small></span><b>' +
-                    risultato.voti + (risultato.voti === 1 ? ' preferenza' : ' preferenze') +
-                    (classePrincipale ? '<em>Più votata</em>' : '') + '</b></summary>' + dettagliVotanti + '</details></li>';
-            }).join('') + '</ol></details>'
-            : '';
         var mioVoto = proposta.mioVoto || null;
         var miePreferenze = mioVoto && Array.isArray(mioVoto.opzioni)
             ? mioVoto.opzioni.map(Number).filter(function (indice) { return Number.isInteger(indice) && indice >= 0 && indice < opzioni.length; })
             : [];
         var miaScelta = mioVoto ? (mioVoto.interesse === 'no' ? 'no' : 'si') : '';
+        var massimoPreferenze = preferenze.reduce(function (massimo, conteggioOpzione) {
+            return Math.max(massimo, Number(conteggioOpzione) || 0);
+        }, 0);
         var opzioniHtml = indiciOpzioniCronologiche_(opzioni).map(function (indice) {
             var opzione = opzioni[indice];
             var selezionata = miePreferenze.indexOf(indice) !== -1 ? ' checked' : '';
+            var conteggio = Number(preferenze[indice] || 0);
+            var percentuale = massimoPreferenze > 0 ? Math.round(conteggio / massimoPreferenze * 100) : 0;
+            var votantiOpzione = Array.isArray(proposta.votantiPerOpzione) && Array.isArray(proposta.votantiPerOpzione[indice])
+                ? proposta.votantiPerOpzione[indice] : [];
+            var dettagliVotanti = votantiOpzione.length
+                ? '<span class="event-vote-voters">' + votantiOpzione.map(function (nome) { return '<span>' + escapeTestoEvento(nome) + '</span>'; }).join('') + '</span>'
+                : '<small class="event-vote-voters-empty">' + (conteggio > 0 ? 'Dettagli non disponibili per le preferenze espresse in precedenza.' : 'Ancora nessuna preferenza') + '</small>';
             return '<label class="event-vote-option' + (selezionata ? ' is-selected' : '') + '"><input type="checkbox" data-role="preferenza" value="' + indice + '"' + selezionata + '>' +
-                '<span><strong>' + escapeTestoEvento(etichettaDataEvento_(opzione.data) || 'Data da definire') + ' · ' + escapeTestoEvento(opzione.ora || 'Ora da definire') +
-                '</strong><small>' + escapeTestoEvento(opzione.luogo || 'Luogo non specificato') + ' · ' + Number(preferenze[indice] || 0) + ' preferenze</small></span></label>';
+                '<span class="event-vote-option-content"><span class="event-vote-option-heading"><strong>' +
+                escapeTestoEvento(etichettaDataEvento_(opzione.data) || 'Data da definire') + ' · ' + escapeTestoEvento(opzione.ora || 'Ora da definire') +
+                '</strong><small>' + conteggio + (conteggio === 1 ? ' voto' : ' voti') + '</small></span>' +
+                '<small class="event-vote-option-place">' + escapeTestoEvento(opzione.luogo || 'Luogo non specificato') + '</small>' +
+                '<span class="event-vote-progress" role="progressbar" aria-label="' + conteggio + (conteggio === 1 ? ' voto' : ' voti') +
+                '" aria-valuemin="0" aria-valuemax="100" aria-valuenow="' + percentuale + '"><span style="width:' + percentuale + '%"></span></span>' +
+                dettagliVotanti + '</span></label>';
         }).join('');
         var votoEsistente;
         if (proposta.ricompilazioneRichiesta) {
@@ -5731,12 +5724,10 @@ function renderProposteEventi(proposte) {
         } else {
             votoEsistente = htmlFormVotoEvento_(id, opzioniHtml, '');
         }
-        var etichettaVoto = mioVoto ? 'Aggiorna voto' : 'Vota';
         var sezioneVotoHtml = '<section class="event-vote-entry">' +
-            '<div class="event-vote-entry-heading"><div><strong>' + (mioVoto ? 'Hai già partecipato' : 'Partecipa alla scelta') +
-            '</strong><small>' + (mioVoto ? 'Puoi rivedere o aggiornare la tua risposta.' : 'Esprimi la tua preferenza per questo evento.') + '</small></div>' +
-            '<button type="button" class="btn-primary event-vote-toggle" aria-expanded="false" data-label="' + etichettaVoto + '">' + etichettaVoto + '</button></div>' +
-            '<div class="event-vote-submodule" hidden>' + votoEsistente + '</div></section>';
+            '<div class="event-vote-entry-heading"><div><strong>' + (mioVoto ? 'Sondaggio date' : 'Partecipa alla scelta') +
+            '</strong><small>' + (mioVoto ? 'Seleziona una o più opzioni per aggiornare il voto. Risultati e partecipanti sono visibili qui.' : 'Seleziona una o più opzioni. Risultati e partecipanti sono visibili qui.') + '</small></div></div>' +
+            '<div class="event-vote-submodule">' + votoEsistente + '</div></section>';
         var aggiungiOpzioneHtml = proposta.creatore ? '' : htmlAggiungiOpzioneEvento_();
         var opzioneFinale = opzioni[opzioneVincente] || {};
         var confermaHtml = proposta.creatore && Number(interesse.si || 0) > 0
@@ -5780,17 +5771,9 @@ function renderProposteEventi(proposte) {
             '<p>' + descrizione + '</p></div><div class="event-card-actions">' + toolsHtml + '</div></header>' + editorCreatore +
             '<div class="event-proposal-counts"><span class="event-count-yes"><span aria-hidden="true">👍</span><strong>' + Number(interesse.si || 0) + '</strong> interessati</span>' +
             '<span class="event-count-no"><span aria-hidden="true">👎</span><strong>' + Number(interesse.no || 0) + '</strong> non interessati</span></div>' +
-            riepilogoOpzioniHtml + sezioneVotoHtml + aggiungiOpzioneHtml + '</article></section></div>';
+            sezioneVotoHtml + aggiungiOpzioneHtml + '</article></section></div>';
     }).join('');
 
-    list.querySelectorAll('.event-vote-toggle').forEach(function (button) {
-        button.addEventListener('click', function () {
-            var panel = button.closest('.event-vote-entry').querySelector('.event-vote-submodule');
-            panel.hidden = !panel.hidden;
-            button.setAttribute('aria-expanded', String(!panel.hidden));
-            button.textContent = panel.hidden ? button.getAttribute('data-label') : 'Chiudi scheda voto';
-        });
-    });
     list.querySelectorAll('.event-proposal-tile').forEach(function (tile) {
         tile.addEventListener('click', function () {
             apriDettaglioPropostaEvento_(tile);
@@ -5847,10 +5830,10 @@ function renderProposteEventi(proposte) {
                 submit.textContent = form.getAttribute('data-has-vote') === 'true' ? 'Aggiorna risposta' : 'Invia risposta';
             });
         });
-        form.querySelectorAll('[data-role="preferenza"]').forEach(function (input) {
-            input.addEventListener('change', function () {
-                input.closest('.event-vote-option').classList.toggle('is-selected', input.checked);
-            });
+        form.addEventListener('change', function (event) {
+            var input = event.target.closest('[data-role="preferenza"]');
+            if (!input || !form.contains(input)) return;
+            input.closest('.event-vote-option').classList.toggle('is-selected', input.checked);
         });
         form.querySelector('.event-vote-submit').addEventListener('click', function (event) {
             var interesse = form.getAttribute('data-selected-interest');
@@ -6174,9 +6157,13 @@ async function apriVotoPubblicoEvento(propostaId, tokenModifica) {
     }
 
     var opzioniPubbliche = proposta.opzioni || [];
+    var votiOpzioniPubbliche = proposta.voti && Array.isArray(proposta.voti.opzioni) ? proposta.voti.opzioni : [];
+    var massimoVotiPubblici = votiOpzioniPubbliche.reduce(function (massimo, conteggio) {
+        return Math.max(massimo, Number(conteggio) || 0);
+    }, 0);
     var preferenze = indiciOpzioniCronologiche_(opzioniPubbliche).map(function (indice) {
-        var conteggio = proposta.voti && proposta.voti.opzioni ? Number(proposta.voti.opzioni[indice] || 0) : 0;
-        return htmlPreferenzaPubblicaEvento_(opzioniPubbliche[indice], indice, conteggio, false);
+        var conteggio = Number(votiOpzioniPubbliche[indice] || 0);
+        return htmlPreferenzaPubblicaEvento_(opzioniPubbliche[indice], indice, conteggio, massimoVotiPubblici, false);
     }).join('');
     var interesse = proposta.voti && proposta.voti.interesse || { si: 0, no: 0 };
     contenuto.innerHTML = '<span class="section-kicker">Proposta evento</span><h1>' + escapeTestoEvento(proposta.titolo) + '</h1>' +
@@ -6190,7 +6177,7 @@ async function apriVotoPubblicoEvento(propostaId, tokenModifica) {
         '<button type="button" class="event-vote-choice event-vote-yes" data-choice="si" aria-pressed="false">👍 Partecipo</button>' +
         '<button type="button" class="event-vote-choice event-vote-no" data-choice="no" aria-pressed="false">👎 Non partecipo</button></div>' +
         '<p class="public-event-choice-hint" aria-live="polite"></p>' +
-        '<details class="event-preference-details public-event-dates"><summary>Date e orari</summary>' +
+        '<details class="event-preference-details public-event-dates" open><summary>Date e orari</summary>' +
         '<p class="public-event-dates-title">Scegli almeno una data</p>' +
         '<div class="event-preferences">' + preferenze + '</div></details>' +
         '<button type="submit" class="public-event-submit" disabled>Invia risposta</button>' +
@@ -6219,12 +6206,20 @@ async function apriVotoPubblicoEvento(propostaId, tokenModifica) {
                     preferenze.scrollIntoView({ behavior: 'smooth', block: 'center' });
                 }
             } else {
-                form.querySelectorAll('[data-role="preferenza"]').forEach(function (input) { input.checked = false; });
+                form.querySelectorAll('[data-role="preferenza"]').forEach(function (input) {
+                    input.checked = false;
+                    input.closest('.event-vote-option').classList.remove('is-selected');
+                });
                 form.querySelector('.event-preference-details').open = false;
             }
             var submit = form.querySelector('.public-event-submit');
             submit.disabled = false;
             submit.textContent = 'Invia risposta';
+        });
+    });
+    form.querySelectorAll('[data-role="preferenza"]').forEach(function (input) {
+        input.addEventListener('change', function () {
+            input.closest('.event-vote-option').classList.toggle('is-selected', input.checked);
         });
     });
     form.addEventListener('submit', function (event) {
@@ -6246,10 +6241,16 @@ async function apriVotoPubblicoEvento(propostaId, tokenModifica) {
     });
 }
 
-function htmlPreferenzaPubblicaEvento_(opzione, indice, conteggio, selezionata) {
-    return '<label class="event-vote-option" data-istante="' + istanteOpzioneEvento_(opzione) + '"><input type="checkbox" data-role="preferenza" value="' + indice + '"' + (selezionata ? ' checked' : '') + '>' +
-        '<span><strong>' + escapeTestoEvento(etichettaDataEvento_(opzione.data) || 'Data da definire') + ' · ' + escapeTestoEvento(opzione.ora || 'Ora da definire') +
-        '</strong><small>' + escapeTestoEvento(opzione.luogo || 'Luogo non specificato') + ' · ' + conteggio + ' preferenze</small></span></label>';
+function htmlPreferenzaPubblicaEvento_(opzione, indice, conteggio, massimoVoti, selezionata) {
+    var percentuale = massimoVoti > 0 ? Math.round(conteggio / massimoVoti * 100) : 0;
+    return '<label class="event-vote-option' + (selezionata ? ' is-selected' : '') + '" data-istante="' + istanteOpzioneEvento_(opzione) + '"><input type="checkbox" data-role="preferenza" value="' + indice + '"' + (selezionata ? ' checked' : '') + '>' +
+        '<span class="event-vote-option-content"><span class="event-vote-option-heading"><strong>' +
+        escapeTestoEvento(etichettaDataEvento_(opzione.data) || 'Data da definire') + ' · ' + escapeTestoEvento(opzione.ora || 'Ora da definire') +
+        '</strong><small>' + conteggio + (conteggio === 1 ? ' voto' : ' voti') + '</small></span>' +
+        '<small class="event-vote-option-place">' + escapeTestoEvento(opzione.luogo || 'Luogo non specificato') + '</small>' +
+        '<span class="event-vote-progress" role="progressbar" aria-label="' + conteggio + (conteggio === 1 ? ' voto' : ' voti') +
+        '" aria-valuemin="0" aria-valuemax="100" aria-valuenow="' + percentuale + '"><span style="width:' + percentuale + '%"></span></span>' +
+        '<small class="event-vote-voters-empty">Voti anonimi</small></span></label>';
 }
 
 async function precompilaRispostaOspite(form) {
@@ -6273,6 +6274,7 @@ async function precompilaRispostaOspite(form) {
     var opzioniScelte = Array.isArray(risposta.opzioni) ? risposta.opzioni.map(Number) : [];
     form.querySelectorAll('[data-role="preferenza"]').forEach(function (input) {
         input.checked = opzioniScelte.indexOf(Number(input.value)) !== -1;
+        input.closest('.event-vote-option').classList.toggle('is-selected', input.checked);
     });
     form.querySelectorAll('.event-vote-choice').forEach(function (button) {
         var selezionato = button.getAttribute('data-choice') === risposta.interesse;
@@ -6313,7 +6315,7 @@ async function aggiungiOpzionePubblicaEvento(form, pulsante) {
     var successiva = Array.prototype.find.call(contenitorePreferenze.querySelectorAll('.event-vote-option'), function (etichetta) {
         return Number(etichetta.getAttribute('data-istante')) > istanteNuova;
     });
-    var nuovaPreferenzaHtml = htmlPreferenzaPubblicaEvento_(result.opzione, result.indice, 0, true);
+    var nuovaPreferenzaHtml = htmlPreferenzaPubblicaEvento_(result.opzione, result.indice, 0, 0, true);
     if (successiva) successiva.insertAdjacentHTML('beforebegin', nuovaPreferenzaHtml);
     else contenitorePreferenze.insertAdjacentHTML('beforeend', nuovaPreferenzaHtml);
     form.querySelector('.event-preference-details').open = true;

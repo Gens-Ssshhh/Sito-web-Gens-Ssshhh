@@ -5735,11 +5735,14 @@ function renderProposteEventi(proposte) {
                 ? proposta.votantiPerOpzione[indice] : [];
             var etichettaOpzione = etichettaDataEvento_(opzione.data) || 'Data da definire';
             var testoOpzione = etichettaOpzione + ' · ' + (opzione.ora || 'Ora da definire');
+            var luogoHtml = opzione.luogo && String(opzione.luogo).trim()
+                ? '<small class="event-vote-option-place">' + escapeTestoEvento(opzione.luogo) + '</small>'
+                : '';
             return '<div class="event-vote-option' + (selezionata ? ' is-selected' : '') + '">' +
                 '<label class="event-vote-option-select"><input type="checkbox" data-role="preferenza" value="' + indice + '"' + selezionata + '>' +
                 '<span class="event-vote-option-content"><strong>' +
                 escapeTestoEvento(testoOpzione) + '</strong>' +
-                '<small class="event-vote-option-place">' + escapeTestoEvento(opzione.luogo || 'Luogo non specificato') + '</small>' +
+                luogoHtml +
                 '<span class="event-vote-progress" role="progressbar" aria-label="' + conteggio + (conteggio === 1 ? ' voto' : ' voti') +
                 '" aria-valuemin="0" aria-valuemax="100" aria-valuenow="' + percentuale + '"><span style="width:' + percentuale + '%"></span></span>' +
                 '</span></label><button type="button" class="event-vote-voters-button" data-voters="' +
@@ -6305,10 +6308,13 @@ async function apriVotoPubblicoEvento(propostaId, tokenModifica) {
 function htmlPreferenzaPubblicaEvento_(opzione, indice, conteggio, massimoVoti, selezionata) {
     var percentuale = massimoVoti > 0 ? Math.round(conteggio / massimoVoti * 100) : 0;
     var testoOpzione = (etichettaDataEvento_(opzione.data) || 'Data da definire') + ' · ' + (opzione.ora || 'Ora da definire');
+    var luogoHtml = opzione.luogo && String(opzione.luogo).trim()
+        ? '<small class="event-vote-option-place">' + escapeTestoEvento(opzione.luogo) + '</small>'
+        : '';
     return '<div class="event-vote-option' + (selezionata ? ' is-selected' : '') + '" data-istante="' + istanteOpzioneEvento_(opzione) + '">' +
         '<label class="event-vote-option-select"><input type="checkbox" data-role="preferenza" value="' + indice + '"' + (selezionata ? ' checked' : '') + '>' +
         '<span class="event-vote-option-content"><strong>' + escapeTestoEvento(testoOpzione) + '</strong>' +
-        '<small class="event-vote-option-place">' + escapeTestoEvento(opzione.luogo || 'Luogo non specificato') + '</small>' +
+        luogoHtml +
         '<span class="event-vote-progress" role="progressbar" aria-label="' + conteggio + (conteggio === 1 ? ' voto' : ' voti') +
         '" aria-valuemin="0" aria-valuemax="100" aria-valuenow="' + percentuale + '"><span style="width:' + percentuale + '%"></span></span>' +
         '</span></label><button type="button" class="event-vote-voters-button" data-voters="[]" data-voters-count="' + conteggio +

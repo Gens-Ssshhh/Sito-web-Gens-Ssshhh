@@ -6303,7 +6303,7 @@ textarea {
   justify-content: flex-end;
   min-width: 42px;
   min-height: 36px;
-  padding: 3px 0 3px 6px;
+  padding: 3px 5px 3px 6px;
   border: 0;
   background: transparent;
   color: var(--navy);

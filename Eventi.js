@@ -125,7 +125,7 @@ function rimuoviContributoVotoEvento_(riepilogo, votanti, chiave) {
 }
 
 function chiaveOpzioneEvento_(opzione) {
-  return [opzione.data, opzione.ora, opzione.luogo || ''].join('|');
+  return [opzione.data, opzione.ora].join('|');
 }
 
 function slotOpzioneEvento_(opzione) {

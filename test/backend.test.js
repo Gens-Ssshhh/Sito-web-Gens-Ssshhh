@@ -1203,27 +1203,24 @@ test('eventi: il creatore modifica la proposta mantenendo solo preferenze ancora
     }
   });
   assert.equal(aggiornamento.ok, true);
-  assert.equal(aggiornamento.ricompilazioniRichieste, 1);
+  assert.equal(aggiornamento.ricompilazioniRichieste, 0);
   assert.equal(eventiRows[1][3], 'Cena soci');
   assert.equal(eventiRows[1][4], 'Descrizione aggiornata');
   assert.deepEqual(JSON.parse(eventiRows[1][5]), [
     { data: '20/11/2026', ora: '18:00', luogo: 'Ristorante' },
     { data: '22/11/2026', ora: '19:00', luogo: '' }
   ]);
-  assert.deepEqual(JSON.parse(eventiRows[1][6]).opzioni, [0, 0]);
-  assert.ok(JSON.parse(eventiRows[1][6])._ricompilazione['ospite:guest-hash']);
-  assert.equal(JSON.parse(eventiRows[1][6])._ricompilazione['socio:mario@example.it'], undefined);
-  assert.equal(emails.length, 2);
-  assert.equal(emails[0].bcc, 'ospite@example.net');
-  assert.equal(emails[1].to, 'mario@example.it');
-  assert.match(emails[1].body, /avvisato 1 persona/);
+  assert.deepEqual(JSON.parse(eventiRows[1][6]).opzioni, [2, 0]);
+  assert.equal(JSON.parse(eventiRows[1][6])._ricompilazione, undefined);
+  assert.equal(emails.length, 1);
+  assert.equal(emails[0].to, 'mario@example.it');
 
   const rimozioneVotata = context.modificaPropostaEvento({
     email: 'mario@example.it', password: 'pw', propostaId: 'evento-edit',
     proposta: { titolo: 'Cena soci', opzioni: [{ data: '22/11/2026', ora: '19:00' }] }
   });
   assert.equal(rimozioneVotata.ok, true);
-  assert.equal(rimozioneVotata.ricompilazioniRichieste, 0);
+  assert.equal(rimozioneVotata.ricompilazioniRichieste, 1);
   assert.deepEqual(JSON.parse(eventiRows[1][6]).opzioni, [0]);
   assert.ok(JSON.parse(eventiRows[1][6])._votanti['socio:mario@example.it']);
 
@@ -1275,6 +1272,37 @@ function creaContestoRicompilazione_(votiIniziali, emails, pushes) {
   return { context, eventiRows };
 }
 
+test('eventi: cambiare solo il luogo conserva voti e conteggi', () => {
+  const emails = [];
+  const pushes = [];
+  const { context, eventiRows } = creaContestoRicompilazione_({
+    interesse: { si: 1, no: 0 },
+    opzioni: [1, 0],
+    _votanti: {
+      'socio:anna@example.it': { interesse: 'si', opzioni: [0], email: 'anna@example.it' }
+    }
+  }, emails, pushes);
+
+  const risultato = context.modificaPropostaEvento({
+    email: 'mario@example.it', password: 'pw', propostaId: 'evento-refill',
+    proposta: {
+      titolo: 'Pizza', descrizione: '', opzioni: [
+        { data: '20/11/2026', ora: '20:00', luogo: '' },
+        { data: '22/11/2026', ora: '20:00', luogo: '' }
+      ]
+    }
+  });
+  const voti = JSON.parse(eventiRows[1][6]);
+
+  assert.equal(risultato.ok, true);
+  assert.equal(risultato.ricompilazioniRichieste, 0);
+  assert.deepEqual(voti.opzioni, [1, 0]);
+  assert.deepEqual(voti._votanti['socio:anna@example.it'].opzioni, [0]);
+  assert.equal(voti._ricompilazione, undefined);
+  assert.equal(emails.length, 0);
+  assert.equal(pushes.length, 0);
+});
+
 test('eventi: avvisa solo chi perde una preferenza selezionata', () => {
   const emails = [];
   const pushes = [];
@@ -1318,9 +1346,9 @@ test('eventi: non avvisa i soci che perdono una preferenza se la notifica non è
   const pushes = [];
   const { context, eventiRows } = creaContestoRicompilazione_({
     interesse: { si: 1, no: 0 },
-    opzioni: [1, 0],
+    opzioni: [0, 1],
     _votanti: {
-      'socio:anna@example.it': { interesse: 'si', opzioni: [0], email: 'anna@example.it' }
+      'socio:anna@example.it': { interesse: 'si', opzioni: [1], email: 'anna@example.it' }
     }
   }, emails, pushes);
 
@@ -1328,8 +1356,7 @@ test('eventi: non avvisa i soci che perdono una preferenza se la notifica non è
     email: 'mario@example.it', password: 'pw', propostaId: 'evento-refill',
     proposta: {
       titolo: 'Pizza', descrizione: '', opzioni: [
-        { data: '20/11/2026', ora: '20:00', luogo: 'Nuovo locale' },
-        { data: '22/11/2026', ora: '20:00', luogo: '' }
+        { data: '20/11/2026', ora: '20:00', luogo: 'Nuovo locale' }
       ]
     }
   });
@@ -1391,18 +1418,16 @@ test('eventi: le modifiche non disturbano chi mantiene le date selezionate', () 
       ]
     }
   }));
-  assert.equal(secondo.ricompilazioniRichieste, 1);
-  assert.ok(emails.some(message => message.bcc === 'anna@example.it'));
-  assert.equal(pushes.length, 1);
-  assert.equal(JSON.stringify(pushes[0].destinatari), '["anna@example.it"]');
-  assert.equal(JSON.stringify(context.getProposteEventi('anna@example.it')[0].mioVoto.opzioni), '[]');
+  assert.equal(secondo.ricompilazioniRichieste, 0);
+  assert.equal(emails.some(message => message.bcc === 'anna@example.it'), false);
+  assert.equal(pushes.length, 0);
+  assert.equal(JSON.stringify(context.getProposteEventi('anna@example.it')[0].mioVoto.opzioni), '[0]');
   const ricompila = context.ricompilaVotoPropostaEvento('anna@example.it', 'evento-refill', true);
-  assert.equal(ricompila.ok, true);
-  assert.equal(ricompila.ricompilato, true);
-  assert.equal(voti().interesse.si, 0);
+  assert.equal(ricompila.ok, false);
+  assert.equal(voti().interesse.si, 1);
   assert.equal(voti().interesse.no, 0);
-  assert.equal(JSON.stringify(voti().opzioni), '[0,0]');
-  assert.equal(voti()._votanti['socio:anna@example.it'], undefined);
+  assert.equal(JSON.stringify(voti().opzioni), '[1,0]');
+  assert.ok(voti()._votanti['socio:anna@example.it']);
 
   assert.equal(context.votaPropostaEvento('anna@example.it', 'evento-refill', { interesse: 'si', opzioni: [1] }).ok, true);
   assert.deepEqual(voti().opzioni, [0, 1]);
@@ -1473,7 +1498,7 @@ test('eventi: un ospite con richiesta di ricompilazione sostituisce il voto prec
     email: 'mario@example.it', password: 'pw', propostaId: 'evento-refill',
     proposta: {
       titolo: 'Pizza', descrizione: '', opzioni: [
-        { data: '20/11/2026', ora: '20:00', luogo: 'Altro locale' },
+        { data: '20/11/2026', ora: '21:00', luogo: 'Altro locale' },
         { data: '21/11/2026', ora: '20:00', luogo: '' }
       ]
     }

@@ -5148,7 +5148,7 @@ function disegnaGraficiAvanzati() {
                         boxWidth: 10,
                         usePointStyle: true,
                         generateLabels: function (chart) {
-                            const labels = Chart.defaults.plugins.legend.labels.generateLabels(chart);
+                            const labels = Chart.overrides.doughnut.plugins.legend.labels.generateLabels(chart);
                             const totale = chart.data.datasets[0].data.reduce((somma, valore) => somma + Number(valore || 0), 0);
                             return labels.map(function (label) {
                                 const percentuale = totale > 0 ? (Number(chart.data.datasets[0].data[label.index]) / totale) * 100 : 0;

@@ -2470,15 +2470,16 @@
                         <!-- GRAFICI -->
                         <div class="dashboard-charts-grid">
                             <div class="dashboard-chart-card">
-                                <h3 style="margin: 0 0 15px 0; font-size: 15px; color: #334155;">Confronto Costo
-                                    Eventi (Trend)</h3>
-                                <canvas id="chartTrendEventi"></canvas>
+                                <h3 class="dashboard-chart-title">Spesa per viaggio</h3>
+                                <p class="dashboard-chart-help">Confronta i costi fissi e variabili. Seleziona una categoria nel grafico a fianco per approfondire.</p>
+                                <div class="dashboard-trend-chart">
+                                    <canvas id="chartTrendEventi"></canvas>
+                                </div>
                             </div>
                             <div class="dashboard-chart-card">
-                                <h3 style="margin: 0 0 15px 0; font-size: 15px; color: #334155;">Distribuzione
-                                    Categorie</h3>
-                                <div
-                                    style="position: relative; height: 300px; width: 100%; display: flex; justify-content: center;">
+                                <h3 class="dashboard-chart-title">Distribuzione per categoria</h3>
+                                <p class="dashboard-chart-help">La legenda mostra la quota percentuale; clicca una voce per confrontarla tra i viaggi.</p>
+                                <div class="dashboard-category-chart">
                                     <canvas id="chartCategorieGlobali"></canvas>
                                 </div>
                             </div>

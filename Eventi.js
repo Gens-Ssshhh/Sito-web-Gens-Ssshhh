@@ -836,9 +836,15 @@ function inviaPromemoriaVotoPropostaEvento(emailCreatore, propostaId) {
 
   var titolo = String(row[3] || 'Evento proposto').replace(/[\r\n]+/g, ' ').trim();
   var titoloHtml = escapeHtmlEvento_(titolo);
-  var url = 'https://Gens-Ssshhh.github.io/Sito-web-Gens-Ssshhh/index.html';
+  var descrizione = String(row[4] || '').trim();
+  var etichetteOpzioni = normalizzaOpzioniEvento_(opzioni).map(function (opzione) {
+    return [opzione.data, opzione.ora, opzione.luogo].filter(Boolean).join(' · ');
+  });
+  var url = 'https://github.com/Gens-Ssshhh/Sito-web-Gens-Ssshhh.git';
   var subject = 'Il tuo voto conta: ' + titolo;
-  var body = 'Ciao,\n\nla proposta "' + titolo + '" è ancora aperta e non risulta una tua risposta. ' +
+  var body = 'Ciao,\n\nla proposta "' + titolo + '" è ancora aperta e non risulta una tua risposta.\n\n' +
+    (descrizione ? 'Descrizione:\n' + descrizione + '\n\n' : '') +
+    (etichetteOpzioni.length ? 'Date e orari proposti:\n- ' + etichetteOpzioni.join('\n- ') + '\n\n' : '') +
     'Il tuo parere è importante: accedi al portale soci e partecipa alla scelta.\n\n' +
     'Accedi al portale: ' + url + '\n\nA presto,\nGens Ssshhh';
   var htmlBody = '<div style="margin:0;padding:32px 12px;background:#f2f5f9;font-family:Arial,Helvetica,sans-serif;color:#243247">' +
@@ -853,6 +859,10 @@ function inviaPromemoriaVotoPropostaEvento(emailCreatore, propostaId) {
     '<div style="margin:0 0 26px;padding:17px 19px;border-left:4px solid #3f72ad;border-radius:6px;background:#f5f8fc">' +
     '<div style="margin-bottom:6px;font-size:11px;font-weight:bold;letter-spacing:1px;color:#75849a">PROPOSTA</div>' +
     '<div style="font-size:18px;line-height:1.4;font-weight:bold;color:#1d2e4a">' + titoloHtml + '</div></div>' +
+    (descrizione ? '<div style="margin:0 0 26px"><div style="margin-bottom:8px;font-size:11px;font-weight:bold;letter-spacing:1px;color:#75849a">DESCRIZIONE</div>' +
+      '<div style="font-size:15px;line-height:1.7;color:#243247">' + escapeHtmlEvento_(descrizione).replace(/\r?\n/g, '<br>') + '</div></div>' : '') +
+    (etichetteOpzioni.length ? '<div style="margin:0 0 26px"><div style="margin-bottom:8px;font-size:11px;font-weight:bold;letter-spacing:1px;color:#75849a">DATE E ORARI PROPOSTI</div>' +
+      '<ul style="margin:0;padding-left:20px;font-size:15px;line-height:1.7;color:#243247">' + etichetteOpzioni.map(function (voce) { return '<li>' + escapeHtmlEvento_(voce) + '</li>'; }).join('') + '</ul></div>' : '') +
     '<div style="text-align:center;padding:4px 0 18px"><a href="' + url + '" style="display:inline-block;padding:15px 28px;border-radius:8px;background:#1d2e4a;color:#ffffff;text-decoration:none;font-size:15px;font-weight:bold">Accedi al portale e vota</a></div>' +
     '<p style="margin:0;font-size:13px;line-height:1.6;color:#75849a;text-align:center">Accedi con il tuo account e apri il calendario per rispondere alla proposta.</p>' +
     '</td></tr><tr><td style="padding:20px 32px;border-top:1px solid #edf0f4;background:#fbfcfe;font-size:12px;line-height:1.6;color:#8490a0;text-align:center">Hai già votato? Puoi ignorare questo messaggio.<br>Gens Ssshhh · Insieme, con la voce di tutti.</td></tr>' +

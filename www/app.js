@@ -4907,6 +4907,13 @@ function normalizzaNomeViaggio(nome) {
         .trim();
 }
 
+function formattaValutaDashboard(importo) {
+    return new Intl.NumberFormat('it-IT', {
+        style: 'currency',
+        currency: 'EUR'
+    }).format(Number(importo) || 0);
+}
+
 function unisciCostiVacanze(costiFissi, reportCsv) {
     var fissi = Array.isArray(costiFissi) ? costiFissi : [];
     var csv = Array.isArray(reportCsv) ? reportCsv : [];
@@ -5059,11 +5066,14 @@ function disegnaGraficiAvanzati() {
     for (let [cat, val] of Object.entries(categorieSommate)) {
         if (val > topCatValore) { topCatValore = val; topCatNome = cat; }
     }
+    let totaleCategorie = Object.values(categorieSommate).reduce((totale, importo) => totale + importo, 0);
+    let quotaTopCategoria = totaleCategorie > 0 ? (topCatValore / totaleCategorie) * 100 : 0;
 
     document.getElementById('kpiDashboard').innerHTML = `
-        <div class="dashboard-kpi-card kpi-budget"><div class="kpi-label">Spesa ${isProCapite ? 'Pro Capite' : 'Totale'}</div><div class="kpi-value">€ ${spesaTotaleGlobale.toFixed(2)}</div></div>
-        <div class="dashboard-kpi-card kpi-spent"><div class="kpi-label">Media per Viaggio</div><div class="kpi-value">€ ${mediaViaggio.toFixed(2)}</div></div>
-        <div class="dashboard-kpi-card kpi-category"><div class="kpi-label">Categoria Top</div><div class="kpi-value kpi-value-text">${topCatNome}</div></div>
+        <div class="dashboard-kpi-card kpi-budget"><div class="kpi-label">Spesa ${isProCapite ? 'pro capite' : 'totale'}</div><div class="kpi-value">${formattaValutaDashboard(spesaTotaleGlobale)}</div><div class="kpi-detail">Nel periodo selezionato</div></div>
+        <div class="dashboard-kpi-card kpi-spent"><div class="kpi-label">Media per viaggio</div><div class="kpi-value">${formattaValutaDashboard(mediaViaggio)}</div><div class="kpi-detail">Su ${numViaggi} ${numViaggi === 1 ? 'viaggio' : 'viaggi'}</div></div>
+        <div class="dashboard-kpi-card kpi-category"><div class="kpi-label">Categoria principale</div><div class="kpi-value kpi-value-text">${topCatNome}</div><div class="kpi-detail">${quotaTopCategoria.toFixed(1).replace('.', ',')}% delle spese per categoria</div></div>
+        <div class="dashboard-kpi-card kpi-trips"><div class="kpi-label">Viaggi analizzati</div><div class="kpi-value">${numViaggi}</div><div class="kpi-detail">${filtroAnno === 'ALL' ? 'Tutti gli anni' : `Anno ${filtroAnno}`}</div></div>
     `;
 
     // --- Preparazione array per Chart.js ---
@@ -5082,10 +5092,40 @@ function disegnaGraficiAvanzati() {
         type: 'bar',
         data: {
             labels: etichetteEventi,
-            datasets: [{ label: 'Spese Fisse (€)', data: costiFissiEventi, backgroundColor: '#6366f1', borderRadius: 6 },
-            { label: 'Spese Variabili (€)', data: costiVariabiliEventi, backgroundColor: '#10b981', borderRadius: 6 }]
+            datasets: [{ label: 'Spese fisse', data: costiFissiEventi, backgroundColor: '#6366f1', borderRadius: 6 },
+            { label: 'Spese variabili', data: costiVariabiliEventi, backgroundColor: '#10b981', borderRadius: 6 }]
         },
-        options: { responsive: true, plugins: { legend: { display: true } }, scales: { x: { stacked: true, ticks: { maxRotation: 45, minRotation: 45 } }, y: { stacked: true, beginAtZero: true } } }
+        options: {
+            indexAxis: 'y',
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: { display: true, position: 'top', align: 'start' },
+                tooltip: {
+                    callbacks: {
+                        label: function (context) {
+                            return `${context.dataset.label}: ${formattaValutaDashboard(context.raw)}`;
+                        }
+                    }
+                }
+            },
+            scales: {
+                x: {
+                    stacked: true,
+                    beginAtZero: true,
+                    ticks: { callback: value => formattaValutaDashboard(value) }
+                },
+                y: {
+                    stacked: true,
+                    ticks: {
+                        callback: function (value) {
+                            const label = this.getLabelForValue(value);
+                            return label.length > 26 ? label.split(' ') : label;
+                        }
+                    }
+                }
+            }
+        }
     });
 
     const ctxCat = document.getElementById('chartCategorieGlobali').getContext('2d');
@@ -5101,7 +5141,33 @@ function disegnaGraficiAvanzati() {
         },
         options: {
             responsive: true, maintainAspectRatio: false,
-            plugins: { legend: { position: 'right', labels: { boxWidth: 12 } } },
+            plugins: {
+                legend: {
+                    position: 'right',
+                    labels: {
+                        boxWidth: 10,
+                        usePointStyle: true,
+                        generateLabels: function (chart) {
+                            const labels = Chart.defaults.plugins.legend.labels.generateLabels(chart);
+                            const totale = chart.data.datasets[0].data.reduce((somma, valore) => somma + Number(valore || 0), 0);
+                            return labels.map(function (label) {
+                                const percentuale = totale > 0 ? (Number(chart.data.datasets[0].data[label.index]) / totale) * 100 : 0;
+                                label.text = `${label.text} · ${percentuale.toFixed(1).replace('.', ',')}%`;
+                                return label;
+                            });
+                        }
+                    }
+                },
+                tooltip: {
+                    callbacks: {
+                        label: function (context) {
+                            const totale = context.dataset.data.reduce((somma, valore) => somma + Number(valore || 0), 0);
+                            const percentuale = totale > 0 ? (Number(context.raw) / totale) * 100 : 0;
+                            return `${context.label}: ${formattaValutaDashboard(context.raw)} (${percentuale.toFixed(1).replace('.', ',')}%)`;
+                        }
+                    }
+                }
+            },
             onClick: function (event, activeElements) {
                 if (activeElements.length > 0) {
                     let indexFetta = activeElements[0].index;

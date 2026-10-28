@@ -157,6 +157,7 @@ function doPost(e) {
     }
 
     var azioniPubbliche = [
+      "inviaLinkReset",
       "completaResetPassword",
       "getPropostaEventoPubblica",
       "votaPropostaEvento",

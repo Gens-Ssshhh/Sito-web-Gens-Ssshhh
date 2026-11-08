@@ -5544,6 +5544,237 @@ textarea {
   margin: 0 0 10px;
 }
 
+.movement-list-caption {
+  margin: 5px 0 0;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.movement-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.movement-filters {
+  display: grid;
+  grid-template-columns: minmax(200px, 2fr) repeat(3, minmax(120px, 1fr));
+  align-items: end;
+  gap: 12px;
+  margin-bottom: 14px;
+}
+
+.movement-filters label {
+  display: grid;
+  gap: 6px;
+  color: var(--navy);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.movement-filters .form-input {
+  min-width: 0;
+}
+
+.movement-status {
+  min-height: 16px;
+  margin: 0 0 10px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.movement-card {
+  align-items: center;
+}
+
+.movement-date-pill {
+  min-width: 74px;
+}
+
+.movement-item-body {
+  min-width: 0;
+}
+
+.movement-item-body h4 {
+  overflow-wrap: anywhere;
+}
+
+.movement-details {
+  margin-top: 6px !important;
+  color: var(--muted);
+  font-size: 11px !important;
+  line-height: 1.6;
+  overflow-wrap: anywhere;
+}
+
+.movement-amount {
+  flex: 0 0 auto;
+  margin-left: auto;
+  color: var(--navy);
+  font-size: 14px;
+  white-space: nowrap;
+}
+
+.movement-amount.is-income {
+  color: #277d53;
+}
+
+.movement-amount.is-expense {
+  color: #b45309;
+}
+
+.listino-actions,
+.listino-item-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.listino-add-button {
+  width: auto;
+  padding: 9px 14px;
+  font-size: 12px;
+}
+
+.listino-form-panel {
+  margin-bottom: 20px;
+  padding: 18px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: #f8fafc;
+}
+
+.listino-form-panel .calendar-header-row {
+  margin-bottom: 14px;
+}
+
+.listino-form-panel .calendar-header-row h3 {
+  font-size: 16px;
+}
+
+.listino-form-fields {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.listino-form-fields > label:not(.listino-active-toggle) {
+  display: grid;
+  gap: 6px;
+  color: var(--navy);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.listino-description-field {
+  grid-column: 1 / -1;
+}
+
+.listino-description-field textarea {
+  min-height: 82px;
+  resize: vertical;
+}
+
+.listino-active-toggle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--navy);
+  font-size: 12px;
+}
+
+.listino-form-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 14px;
+}
+
+.listino-form-footer p,
+.listino-status {
+  margin: 0;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.listino-toolbar {
+  display: grid;
+  grid-template-columns: minmax(200px, 2fr) minmax(140px, 1fr) auto;
+  align-items: end;
+  gap: 12px;
+  margin-bottom: 14px;
+}
+
+.listino-toolbar > label:not(.listino-inactive-filter) {
+  display: grid;
+  gap: 6px;
+  color: var(--navy);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.listino-toolbar .form-input {
+  min-width: 0;
+}
+
+.listino-inactive-filter {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  min-height: 42px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.listino-status {
+  min-height: 16px;
+  margin: 0 0 10px;
+}
+
+.listino-card {
+  align-items: center;
+}
+
+.listino-card.is-inactive {
+  opacity: 0.72;
+}
+
+.listino-item-body {
+  min-width: 0;
+}
+
+.listino-item-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.listino-item-heading h4 {
+  margin: 5px 0 2px;
+  overflow-wrap: anywhere;
+}
+
+.listino-type-label {
+  margin: 0 0 3px !important;
+  color: var(--muted);
+  font-size: 10px !important;
+  text-transform: uppercase;
+}
+
+.listino-price {
+  flex: 0 0 auto;
+  margin-left: auto;
+  color: var(--navy);
+  font-size: 16px;
+  white-space: nowrap;
+}
+
+.listino-deactivate-button {
+  color: #a15319;
+}
+
 #viewCalendario .calendar-proposals-panel {
   padding: clamp(18px, 2.4vw, 28px);
 }
@@ -6776,5 +7007,90 @@ textarea {
     min-height: 48px;
     padding: 10px 14px !important;
     white-space: normal;
+  }
+}
+
+@media (max-width: 700px) {
+  .movement-filters {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .movement-search-field {
+    grid-column: 1 / -1;
+  }
+
+  .listino-toolbar {
+    grid-template-columns: minmax(0, 1fr) minmax(130px, 0.8fr);
+  }
+
+  .listino-inactive-filter {
+    grid-column: 1 / -1;
+    min-height: auto;
+  }
+}
+
+@media (max-width: 520px) {
+  .movement-actions {
+    width: 100%;
+  }
+
+  .movement-actions .compact-action {
+    flex: 1;
+  }
+
+  .movement-card {
+    align-items: flex-start;
+    flex-wrap: wrap;
+  }
+
+  .movement-item-body {
+    flex: 1;
+  }
+
+  .movement-amount {
+    width: 100%;
+    margin-left: 88px;
+  }
+
+  #viewListinoPrezzi .calendar-panel > .calendar-header-row,
+  .listino-item-heading,
+  .listino-form-footer {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .listino-actions,
+  .listino-item-actions {
+    width: 100%;
+  }
+
+  .listino-actions .compact-action,
+  .listino-item-actions .compact-action,
+  .listino-add-button {
+    flex: 1;
+  }
+
+  .listino-form-fields,
+  .listino-toolbar {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .listino-description-field,
+  .listino-inactive-filter {
+    grid-column: auto;
+  }
+
+  .listino-card {
+    align-items: flex-start;
+    flex-wrap: wrap;
+  }
+
+  .listino-item-body {
+    flex: 1;
+  }
+
+  .listino-price {
+    width: 100%;
+    margin-left: 88px;
   }
 }

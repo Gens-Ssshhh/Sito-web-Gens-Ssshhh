@@ -106,6 +106,229 @@ function getDatiBilancioCompleto() {
   }
 }
 
+function numeroMovimentoContabile_(valore) {
+  if (typeof valore === "number") return isFinite(valore) ? valore : 0;
+  var testo = String(valore == null ? "" : valore).trim().replace(/\s/g, "");
+  if (!testo) return 0;
+  if (testo.indexOf(",") >= 0 && testo.indexOf(".") >= 0) {
+    testo = testo.replace(/\./g, "").replace(",", ".");
+  } else {
+    testo = testo.replace(",", ".");
+  }
+  var numero = Number(testo);
+  return isFinite(numero) ? numero : 0;
+}
+
+function dataMovimentoContabile_(valore) {
+  if ((valore instanceof Date || Object.prototype.toString.call(valore) === "[object Date]") &&
+      !isNaN(valore.getTime())) {
+    return Utilities.formatDate(valore, "Europe/Rome", "yyyy-MM-dd");
+  }
+  var testo = String(valore == null ? "" : valore).trim();
+  var iso = testo.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/);
+  if (iso) return iso[1] + "-" + ("0" + iso[2]).slice(-2) + "-" + ("0" + iso[3]).slice(-2);
+  var italiana = testo.match(/^(\d{1,2})[/.](\d{1,2})[/.](\d{4})/);
+  if (italiana) return italiana[3] + "-" + ("0" + italiana[2]).slice(-2) + "-" + ("0" + italiana[1]).slice(-2);
+  return "";
+}
+
+var INTESTAZIONI_LISTINO_PREZZI_ = [
+  "ID", "Nome", "Descrizione", "Categoria", "Tipo", "Prezzo", "Attivo", "Aggiornato il"
+];
+
+function getListinoPrezzi(email) {
+  var user = getDatiUtente(email);
+  if (!user) return "NO_AUTH";
+
+  var ss = SpreadsheetApp.openById(ID_FOGLIO_CONTABILITA);
+  var sheet = ss.getSheetByName("listino");
+  if (!sheet || sheet.getLastRow() < 2) return [];
+
+  var mostraInattivi = isRuoloAmministrativo(user.ruolo);
+  var righe = sheet.getDataRange().getValues();
+  var voci = [];
+  for (var i = 1; i < righe.length; i++) {
+    var riga = righe[i];
+    var id = String(riga[0] == null ? "" : riga[0]).trim();
+    var nome = String(riga[1] == null ? "" : riga[1]).trim();
+    if (!id || !nome) continue;
+
+    var attivo = riga[6] === true || String(riga[6]).trim().toLowerCase() === "true" ||
+      String(riga[6]).trim().toLowerCase() === "si" || String(riga[6]).trim() === "1";
+    if (!mostraInattivi && !attivo) continue;
+    voci.push({
+      id: id,
+      riga: i + 1,
+      nome: nome,
+      descrizione: String(riga[2] == null ? "" : riga[2]).trim(),
+      categoria: String(riga[3] == null ? "" : riga[3]).trim(),
+      tipo: String(riga[4] == null ? "Servizio" : riga[4]).trim() || "Servizio",
+      prezzo: numeroMovimentoContabile_(riga[5]),
+      attivo: attivo
+    });
+  }
+  return voci;
+}
+
+function salvaVoceListino(email, dati) {
+  var user = getDatiUtente(email);
+  if (!user || !isRuoloAmministrativo(user.ruolo)) return "NO_AUTH";
+  if (!dati || typeof dati !== "object") return { ok: false, messaggio: "Dati della voce non validi." };
+
+  var id = String(dati.id == null ? "" : dati.id).trim();
+  var nome = String(dati.nome == null ? "" : dati.nome).trim();
+  var descrizione = String(dati.descrizione == null ? "" : dati.descrizione).trim();
+  var categoria = String(dati.categoria == null ? "" : dati.categoria).trim();
+  var tipo = String(dati.tipo == null ? "" : dati.tipo).trim();
+  var prezzoTesto = String(dati.prezzo == null ? "" : dati.prezzo).trim();
+  if (!nome || nome.length > 120) {
+    return { ok: false, messaggio: "Inserisci un nome valido (massimo 120 caratteri)." };
+  }
+  if (descrizione.length > 500) {
+    return { ok: false, messaggio: "La descrizione non può superare 500 caratteri." };
+  }
+  if (!categoria || categoria.length > 60) {
+    return { ok: false, messaggio: "Inserisci una categoria valida (massimo 60 caratteri)." };
+  }
+  if (tipo !== "Servizio" && tipo !== "Pacchetto") {
+    return { ok: false, messaggio: "Seleziona un tipo di voce valido." };
+  }
+  if (!/^\d+(?:[.,]\d{1,2})?$/.test(prezzoTesto)) {
+    return { ok: false, messaggio: "Inserisci un prezzo valido maggiore o uguale a zero." };
+  }
+  var prezzo = Number(prezzoTesto.replace(",", "."));
+  if (!isFinite(prezzo) || prezzo < 0 || prezzo > 999999999) {
+    return { ok: false, messaggio: "Inserisci un prezzo valido maggiore o uguale a zero." };
+  }
+  prezzo = Math.round(prezzo * 100) / 100;
+
+  var ss = SpreadsheetApp.openById(ID_FOGLIO_CONTABILITA);
+  var sheet = ss.getSheetByName("listino");
+  if (!sheet) sheet = ss.insertSheet("listino");
+  var righe = sheet.getDataRange().getValues();
+  if (!righe.length || righe[0].every(function (valore) { return valore === "" || valore == null; })) {
+    sheet.getRange(1, 1, 1, INTESTAZIONI_LISTINO_PREZZI_.length)
+      .setValues([INTESTAZIONI_LISTINO_PREZZI_]);
+    righe = [INTESTAZIONI_LISTINO_PREZZI_];
+  }
+
+  var indiceModifica = -1;
+  if (id) {
+    for (var i = 1; i < righe.length; i++) {
+      if (String(righe[i][0] == null ? "" : righe[i][0]).trim() === id) {
+        indiceModifica = i;
+        break;
+      }
+    }
+    if (indiceModifica < 1) {
+      return { ok: false, messaggio: "La voce da modificare non è più disponibile. Aggiorna il listino." };
+    }
+  }
+
+  var duplicato = righe.slice(1).some(function (riga, indice) {
+    return indice + 1 !== indiceModifica &&
+      String(riga[1] || "").trim().toLowerCase() === nome.toLowerCase();
+  });
+  if (duplicato) return { ok: false, messaggio: "Esiste già una voce con questo nome." };
+
+  var idVoce = id || Utilities.getUuid();
+  var aggiornatoIl = new Date();
+  var attivo = dati.attivo !== false && String(dati.attivo).toLowerCase() !== "false";
+  var valori = [idVoce, nome, descrizione, categoria, tipo, prezzo, attivo, aggiornatoIl];
+
+  if (indiceModifica >= 1) {
+    sheet.getRange(indiceModifica + 1, 1, 1, valori.length).setValues([valori]);
+  } else {
+    sheet.appendRow(valori);
+  }
+  return { ok: true, id: idVoce };
+}
+
+function disattivaVoceListino(email, id) {
+  var user = getDatiUtente(email);
+  if (!user || !isRuoloAmministrativo(user.ruolo)) return "NO_AUTH";
+
+  var idVoce = String(id == null ? "" : id).trim();
+  if (!idVoce) return { ok: false, messaggio: "Identificativo della voce non valido." };
+  var ss = SpreadsheetApp.openById(ID_FOGLIO_CONTABILITA);
+  var sheet = ss.getSheetByName("listino");
+  if (!sheet || sheet.getLastRow() < 2) {
+    return { ok: false, messaggio: "La voce da aggiornare non è più disponibile." };
+  }
+
+  var righe = sheet.getDataRange().getValues();
+  for (var i = 1; i < righe.length; i++) {
+    if (String(righe[i][0] == null ? "" : righe[i][0]).trim() !== idVoce) continue;
+    var nome = String(righe[i][1] == null ? "" : righe[i][1]).trim();
+    sheet.getRange(i + 1, 7).setValue(false);
+    sheet.getRange(i + 1, 8).setValue(new Date());
+    return { ok: true, nome: nome };
+  }
+  return { ok: false, messaggio: "La voce da aggiornare non è più disponibile." };
+}
+
+function getMovimentiContabili(email) {
+  var user = getDatiUtente(email);
+  if (!user || !isRuoloAmministrativo(user.ruolo)) return "NO_AUTH";
+
+  var ss = SpreadsheetApp.openById(ID_FOGLIO_CONTABILITA);
+  var sheet = ss.getSheetByName("bilancio");
+  var righe = sheet ? sheet.getDataRange().getValues() : [];
+  var contiLiquidita = [
+    "banca c/c", "cassa contanti", "crediti v/soci",
+    "crediti v/clienti (commerciale)", "crediti v/enti pubblici"
+  ];
+  var movimenti = [];
+  var totEntrate = 0;
+  var totUscite = 0;
+
+  for (var i = 1; i < righe.length; i++) {
+    var riga = righe[i];
+    var importo = numeroMovimentoContabile_(riga[4]);
+    var dare = String(riga[2] == null ? "" : riga[2]).trim();
+    var avere = String(riga[3] == null ? "" : riga[3]).trim();
+    var uscita = !!dare && contiLiquidita.indexOf(dare.toLowerCase()) === -1;
+    var entrata = !!avere && contiLiquidita.indexOf(avere.toLowerCase()) === -1;
+    if (importo <= 0 || (!uscita && !entrata)) continue;
+
+    if (uscita) totUscite += importo;
+    if (entrata) totEntrate += importo;
+    movimenti.push({
+      riga: i + 1,
+      data: dataMovimentoContabile_(riga[0]),
+      descrizione: String(riga[1] == null ? "" : riga[1]).trim(),
+      dare: dare,
+      avere: avere,
+      importo: importo,
+      controparte: String(riga[5] == null ? "" : riga[5]).trim(),
+      codiceFiscalePiva: String(riga[6] == null ? "" : riga[6]).trim(),
+      attivita: String(riga[7] == null ? "" : riga[7]).trim(),
+      documento: String(riga[8] == null ? "" : riga[8]).trim(),
+      note: String(riga[9] == null ? "" : riga[9]).trim(),
+      tipo: uscita && entrata ? "Misto" : uscita ? "Uscita" : "Entrata",
+      isUscita: uscita,
+      isEntrata: entrata
+    });
+  }
+
+  movimenti.sort(function (a, b) {
+    if (a.data !== b.data) return a.data < b.data ? 1 : -1;
+    return b.riga - a.riga;
+  });
+
+  var limite = 500;
+  return {
+    movimenti: movimenti.slice(0, limite),
+    riepilogo: {
+      entrate: Math.round(totEntrate * 100) / 100,
+      uscite: Math.round(totUscite * 100) / 100,
+      netto: Math.round((totEntrate - totUscite) * 100) / 100
+    },
+    totaleMovimenti: movimenti.length,
+    limite: limite
+  };
+}
+
 function getPianoDeiContiDinamico() {
   try {
     var ss = SpreadsheetApp.openById(ID_FOGLIO_CONTABILITA);

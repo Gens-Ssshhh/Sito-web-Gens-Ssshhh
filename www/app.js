@@ -824,71 +824,324 @@ async function salvaContattoCommerciale(event) {
     }
 }
 
-function renderListinoPrezziView() {
+var listinoPrezziVoci = [];
+
+async function renderListinoPrezziView() {
     var list = document.getElementById('listinoPrezziList');
-    if (!list) return;
+    var status = document.getElementById('listinoStatus');
+    if (!list || !status) return;
 
-    var servizi = [
-        { nome: 'Quota associativa ordinaria', descrizione: 'Accesso ai servizi associativi e alle attività sociali', prezzo: 120, tipo: 'Soci' },
-        { nome: 'Quota volontari', descrizione: 'Supporto operativo e accesso agli eventi del team', prezzo: 80, tipo: 'Volontari' },
-        { nome: 'Eventi e workshop', descrizione: 'Ingressi dedicati alle attività del mese', prezzo: 35, tipo: 'Eventi' },
-        { nome: 'Supporto amministrativo', descrizione: 'Consulenza pratica per pratiche e documenti', prezzo: 60, tipo: 'Servizi' },
-        { nome: 'Pacchetto sponsor base', descrizione: 'Visibilità standard e presenza in eventi', prezzo: 250, tipo: 'Sponsor' }
-    ];
+    var isAdmin = utenteCorrenteHaRuoloAdmin();
+    document.getElementById('listinoAddButton').classList.toggle('hidden', !isAdmin);
+    document.getElementById('listinoInactiveFilter').classList.toggle('hidden', !isAdmin);
+    status.innerText = 'Caricamento del listino...';
+    list.innerHTML = '';
 
-    var pacchetti = ['Base', 'Team', 'Sponsor'];
-    var media = servizi.reduce(function (tot, item) { return tot + item.prezzo; }, 0) / servizi.length;
+    try {
+        var voci = await chiamaServer('getListinoPrezzi', curEmail, true);
+        if (!Array.isArray(voci)) throw new Error('Il server non ha restituito un listino valido.');
+        listinoPrezziVoci = voci;
+        var attive = voci.filter(function (voce) { return voce.attivo; });
+        var servizi = attive.filter(function (voce) { return voce.tipo === 'Servizio'; });
+        var pacchetti = attive.filter(function (voce) { return voce.tipo === 'Pacchetto'; });
+        var media = attive.length
+            ? attive.reduce(function (totale, voce) { return totale + (Number(voce.prezzo) || 0); }, 0) / attive.length
+            : 0;
 
-    document.getElementById('listinoPrezziServizi').innerText = String(servizi.length);
-    document.getElementById('listinoPrezziPacchetti').innerText = String(pacchetti.length);
-    document.getElementById('listinoPrezziMedio').innerText = '€' + media.toFixed(0);
-
-    list.innerHTML = servizi.map(function (servizio) {
-        return '<article class="calendar-item">' +
-            '<div class="calendar-date-pill"><span>' + servizio.tipo.slice(0, 3).toUpperCase() + '</span><strong>€</strong></div>' +
-            '<div class="calendar-item-body">' +
-            '<span class="calendar-tag">' + servizio.tipo + '</span>' +
-            '<h4>' + servizio.nome + '</h4>' +
-            '<p>' + servizio.descrizione + '</p>' +
-            '<p style="margin-top:6px; font-size:11px; color:#64748b;">Prezzo: €' + servizio.prezzo + '</p>' +
-            '</div>' +
-            '</article>';
-    }).join('') || '<p class="notification-empty">Nessun servizio disponibile.</p>';
+        document.getElementById('listinoPrezziServizi').innerText = String(servizi.length);
+        document.getElementById('listinoPrezziPacchetti').innerText = String(pacchetti.length);
+        document.getElementById('listinoPrezziMedio').innerText = formattaValutaMovimento(media);
+        var caption = document.getElementById('listinoPrezziCaption');
+        if (caption) caption.innerText = 'Catalogo aggiornato · ' + attive.length +
+            (attive.length === 1 ? ' voce attiva' : ' voci attive');
+        filtraListinoPrezzi();
+    } catch (error) {
+        console.error('Impossibile caricare il listino prezzi:', error);
+        status.innerText = error.message || 'Impossibile caricare il listino prezzi.';
+        list.innerHTML = '';
+    }
 }
 
-function renderMovimentiView() {
-    var list = document.getElementById('movimentiList');
-    if (!list) return;
+function filtraListinoPrezzi() {
+    var list = document.getElementById('listinoPrezziList');
+    var status = document.getElementById('listinoStatus');
+    if (!list || !status) return;
 
-    var movimenti = [
-        { tipo: 'Entrata', descrizione: 'Quota associativa', importo: 420.00, data: '2026-10-02' },
-        { tipo: 'Uscita', descrizione: 'Canone sede', importo: -180.00, data: '2026-10-01' },
-        { tipo: 'Entrata', descrizione: 'Contributo evento', importo: 560.00, data: '2026-09-28' },
-        { tipo: 'Uscita', descrizione: 'Grafica e stampa', importo: -240.00, data: '2026-09-24' },
-        { tipo: 'Entrata', descrizione: 'Tesseramento', importo: 310.00, data: '2026-09-20' }
-    ];
+    var query = (document.getElementById('listinoSearch').value || '').trim().toLocaleLowerCase('it');
+    var tipo = document.getElementById('listinoFilterType').value;
+    var includeInactive = utenteCorrenteHaRuoloAdmin() &&
+        document.getElementById('listinoShowInactive').checked;
+    var voci = listinoPrezziVoci.filter(function (voce) {
+        if (!includeInactive && !voce.attivo) return false;
+        if (tipo !== 'Tutti' && voce.tipo !== tipo) return false;
+        return !query || [voce.nome, voce.descrizione, voce.categoria]
+            .some(function (valore) { return String(valore || '').toLocaleLowerCase('it').includes(query); });
+    });
 
-    var entrate = movimenti.filter(function (m) { return m.tipo === 'Entrata'; }).reduce(function (tot, m) { return tot + m.importo; }, 0);
-    var uscite = movimenti.filter(function (m) { return m.tipo === 'Uscita'; }).reduce(function (tot, m) { return tot + Math.abs(m.importo); }, 0);
-    var netto = entrate - uscite;
-
-    document.getElementById('movimentiEntrate').innerText = '€' + entrate.toFixed(2).replace('.', ',');
-    document.getElementById('movimentiUscite').innerText = '€' + uscite.toFixed(2).replace('.', ',');
-    document.getElementById('movimentiNetto').innerText = '€' + netto.toFixed(2).replace('.', ',');
-
-    list.innerHTML = movimenti.map(function (movimento) {
-        var segno = movimento.importo >= 0 ? '+' : '-';
-        var importo = '€' + Math.abs(movimento.importo).toFixed(2).replace('.', ',');
-        return '<article class="calendar-item">' +
-            '<div class="calendar-date-pill"><span>' + movimento.tipo.slice(0, 3).toUpperCase() + '</span><strong>' + (movimento.tipo === 'Entrata' ? 'E' : 'U') + '</strong></div>' +
-            '<div class="calendar-item-body">' +
-            '<span class="calendar-tag">' + movimento.tipo + '</span>' +
-            '<h4>' + movimento.descrizione + '</h4>' +
-            '<p>' + movimento.data + '</p>' +
-            '<p style="margin-top:6px; font-size:11px; color:#64748b;">Importo ' + segno + ' ' + importo + '</p>' +
-            '</div>' +
+    var escape = escapeActionCenterText;
+    list.innerHTML = voci.map(function (voce) {
+        var prezzo = formattaValutaMovimento(voce.prezzo);
+        var label = voce.tipo === 'Pacchetto' ? 'Pacchetto' : 'Servizio';
+        return '<article class="calendar-item listino-card ' + (voce.attivo ? '' : 'is-inactive') + '">' +
+            '<div class="calendar-date-pill"><span>' + escape(String(voce.categoria || label).slice(0, 3).toUpperCase()) +
+            '</span><strong>€</strong></div>' +
+            '<div class="calendar-item-body listino-item-body">' +
+            '<div class="listino-item-heading"><div><span class="calendar-tag">' + escape(voce.categoria || label) +
+            (voce.attivo ? '' : ' · Disattivato') + '</span><h4>' + escape(voce.nome) + '</h4></div>' +
+            (utenteCorrenteHaRuoloAdmin()
+                ? '<div class="listino-item-actions"><button type="button" class="compact-action" data-listino-action="edit" data-listino-id="' + escape(voce.id) + '">Modifica</button>' +
+                (voce.attivo
+                    ? '<button type="button" class="compact-action listino-deactivate-button" data-listino-action="deactivate" data-listino-id="' + escape(voce.id) + '">Disattiva</button>'
+                    : '') + '</div>'
+                : '') + '</div>' +
+            '<p class="listino-type-label">' + escape(label) + '</p>' +
+            (voce.descrizione ? '<p>' + escape(voce.descrizione) + '</p>' : '') +
+            '</div><strong class="listino-price">' + escape(prezzo) + '</strong>' +
             '</article>';
-    }).join('') || '<p class="notification-empty">Nessun movimento disponibile.</p>';
+    }).join('') || '<p class="notification-empty">Nessuna voce corrisponde ai filtri selezionati.</p>';
+
+    list.onclick = function (event) {
+        var button = event.target.closest('button[data-listino-action]');
+        if (!button) return;
+        if (button.dataset.listinoAction === 'edit') modificaVoceListino(button.dataset.listinoId);
+        if (button.dataset.listinoAction === 'deactivate') disattivaVoceListino(button.dataset.listinoId);
+    };
+    status.innerText = voci.length + (voci.length === 1 ? ' voce visualizzata.' : ' voci visualizzate.');
+}
+
+function apriVoceListino() {
+    var form = document.getElementById('listinoForm');
+    if (!form) return;
+    form.reset();
+    document.getElementById('listinoVoceId').value = '';
+    document.getElementById('listinoAttivo').checked = true;
+    document.getElementById('listinoFormTitle').innerText = 'Nuova voce';
+    document.getElementById('listinoFormMessage').innerText = '';
+    document.getElementById('listinoFormPanel').classList.remove('hidden');
+    document.getElementById('listinoNome').focus();
+}
+
+function modificaVoceListino(id) {
+    var voce = listinoPrezziVoci.find(function (item) { return String(item.id) === String(id); });
+    if (!voce) {
+        showToast('La voce non è più disponibile. Aggiorna il listino.', 'error');
+        return;
+    }
+    document.getElementById('listinoVoceId').value = voce.id;
+    document.getElementById('listinoNome').value = voce.nome || '';
+    document.getElementById('listinoDescrizione').value = voce.descrizione || '';
+    document.getElementById('listinoCategoria').value = voce.categoria || '';
+    document.getElementById('listinoTipo').value = voce.tipo || 'Servizio';
+    document.getElementById('listinoPrezzoInput').value = Number(voce.prezzo || 0).toFixed(2);
+    document.getElementById('listinoAttivo').checked = Boolean(voce.attivo);
+    document.getElementById('listinoFormTitle').innerText = 'Modifica voce';
+    document.getElementById('listinoFormMessage').innerText = '';
+    document.getElementById('listinoFormPanel').classList.remove('hidden');
+    document.getElementById('listinoNome').focus();
+}
+
+function chiudiVoceListino() {
+    document.getElementById('listinoFormPanel').classList.add('hidden');
+}
+
+async function salvaVoceListino(event) {
+    event.preventDefault();
+    var submit = event.currentTarget.querySelector('[type="submit"]');
+    var message = document.getElementById('listinoFormMessage');
+    var dati = {
+        id: document.getElementById('listinoVoceId').value,
+        nome: document.getElementById('listinoNome').value,
+        descrizione: document.getElementById('listinoDescrizione').value,
+        categoria: document.getElementById('listinoCategoria').value,
+        tipo: document.getElementById('listinoTipo').value,
+        prezzo: document.getElementById('listinoPrezzoInput').value,
+        attivo: document.getElementById('listinoAttivo').checked
+    };
+    submit.disabled = true;
+    message.innerText = 'Salvataggio in corso...';
+    try {
+        var risultato = await chiamaServer('salvaVoceListino', [curEmail, dati], true);
+        if (!risultato || !risultato.ok) throw new Error(risultato && risultato.messaggio || 'Salvataggio non riuscito.');
+        chiudiVoceListino();
+        showToast('Voce del listino salvata.', 'success');
+        await renderListinoPrezziView();
+    } catch (error) {
+        console.error('Impossibile salvare la voce del listino:', error);
+        message.innerText = error.message || 'Impossibile salvare la voce del listino.';
+    } finally {
+        submit.disabled = false;
+    }
+}
+
+async function disattivaVoceListino(id) {
+    var voce = listinoPrezziVoci.find(function (item) { return String(item.id) === String(id); });
+    if (!voce) {
+        showToast('La voce non è più disponibile. Aggiorna il listino.', 'error');
+        return;
+    }
+    if (!window.confirm('Disattivare "' + voce.nome + '"? La voce resterà nello storico e potrà essere riattivata.')) return;
+
+    try {
+        var risultato = await chiamaServer('disattivaVoceListino', [curEmail, voce.id], true);
+        if (!risultato || !risultato.ok) throw new Error(risultato && risultato.messaggio || 'Disattivazione non riuscita.');
+        showToast('Voce disattivata.', 'success');
+        await renderListinoPrezziView();
+    } catch (error) {
+        console.error('Impossibile disattivare la voce del listino:', error);
+        showToast(error.message || 'Impossibile disattivare la voce del listino.', 'error');
+    }
+}
+
+var movimentiContabiliCaricati = [];
+var movimentiContabiliVisibili = [];
+var movimentiContabiliTotali = 0;
+var movimentiContabiliLimite = 500;
+
+function formattaValutaMovimento(valore) {
+    return new Intl.NumberFormat('it-IT', { style: 'currency', currency: 'EUR' }).format(Number(valore) || 0);
+}
+
+function formattaDataMovimento(data) {
+    var corrispondenza = String(data || '').match(/^(\d{4})-(\d{2})-(\d{2})$/);
+    if (!corrispondenza) return 'Data non disponibile';
+    return new Intl.DateTimeFormat('it-IT', {
+        day: '2-digit', month: 'long', year: 'numeric'
+    }).format(new Date(Number(corrispondenza[1]), Number(corrispondenza[2]) - 1, Number(corrispondenza[3])));
+}
+
+async function renderMovimentiView() {
+    var list = document.getElementById('movimentiList');
+    var status = document.getElementById('movimentiStatus');
+    if (!list || !status) return;
+
+    if (!utenteCorrenteHaRuoloAdmin()) {
+        status.innerText = 'I movimenti contabili sono riservati agli amministratori.';
+        list.innerHTML = '';
+        return;
+    }
+
+    status.innerText = 'Caricamento dei movimenti contabili...';
+    list.innerHTML = '';
+    try {
+        var dati = await chiamaServer('getMovimentiContabili', curEmail, true);
+        if (!dati || !Array.isArray(dati.movimenti) || !dati.riepilogo) {
+            throw new Error('Il server non ha restituito un riepilogo contabile valido.');
+        }
+
+        movimentiContabiliCaricati = dati.movimenti;
+        movimentiContabiliTotali = Number(dati.totaleMovimenti) || dati.movimenti.length;
+        movimentiContabiliLimite = Number(dati.limite) || 500;
+        document.getElementById('movimentiEntrate').innerText = formattaValutaMovimento(dati.riepilogo.entrate);
+        document.getElementById('movimentiUscite').innerText = formattaValutaMovimento(dati.riepilogo.uscite);
+        document.getElementById('movimentiNetto').innerText = formattaValutaMovimento(dati.riepilogo.netto);
+
+        var caption = document.getElementById('movimentiListCaption');
+        if (caption) caption.innerText = 'Riepilogo completo · ' + movimentiContabiliTotali +
+            (movimentiContabiliTotali === 1 ? ' movimento contabilizzato' : ' movimenti contabilizzati');
+        filtraMovimenti();
+    } catch (error) {
+        console.error('Impossibile caricare i movimenti contabili:', error);
+        status.innerText = error.message || 'Impossibile caricare i movimenti contabili.';
+        list.innerHTML = '';
+    }
+}
+
+function filtraMovimenti() {
+    var list = document.getElementById('movimentiList');
+    var status = document.getElementById('movimentiStatus');
+    if (!list || !status) return;
+
+    var ricerca = (document.getElementById('movimentiSearch').value || '').trim().toLocaleLowerCase('it');
+    var tipo = document.getElementById('movimentiTypeFilter').value;
+    var dataInizio = document.getElementById('movimentiDateFrom').value;
+    var dataFine = document.getElementById('movimentiDateTo').value;
+    if (dataInizio && dataFine && dataInizio > dataFine) {
+        status.innerText = 'La data iniziale deve precedere o coincidere con quella finale.';
+        list.innerHTML = '';
+        movimentiContabiliVisibili = [];
+        return;
+    }
+
+    movimentiContabiliVisibili = movimentiContabiliCaricati.filter(function (movimento) {
+        if (tipo !== 'Tutti' && movimento.tipo !== tipo) return false;
+        if (dataInizio && (!movimento.data || movimento.data < dataInizio)) return false;
+        if (dataFine && (!movimento.data || movimento.data > dataFine)) return false;
+        if (!ricerca) return true;
+        return [
+            movimento.descrizione, movimento.controparte, movimento.dare, movimento.avere,
+            movimento.documento, movimento.codiceFiscalePiva, movimento.attivita, movimento.note
+        ].some(function (valore) {
+            return String(valore || '').toLocaleLowerCase('it').indexOf(ricerca) !== -1;
+        });
+    });
+
+    var escape = escapeActionCenterText;
+    list.innerHTML = movimentiContabiliVisibili.map(function (movimento) {
+        var tipo = movimento.tipo || 'Movimento';
+        var importo = Number(movimento.importo) || 0;
+        var dettagli = [];
+        if (movimento.controparte) dettagli.push(escape(movimento.controparte));
+        if (movimento.documento) dettagli.push('Doc. ' + escape(movimento.documento));
+        if (movimento.attivita) dettagli.push(escape(movimento.attivita));
+        if (movimento.dare) dettagli.push('Dare: ' + escape(movimento.dare));
+        if (movimento.avere) dettagli.push('Avere: ' + escape(movimento.avere));
+        if (movimento.note) dettagli.push(escape(movimento.note));
+        var iniziale = tipo === 'Entrata' ? 'E' : tipo === 'Uscita' ? 'U' : 'M';
+        var segno = tipo === 'Entrata' ? '+' : tipo === 'Uscita' ? '−' : '';
+
+        return '<article class="calendar-item movement-card">' +
+            '<div class="calendar-date-pill movement-date-pill"><span>' +
+            escape(tipo === 'Entrata' ? 'ENTRATA' : tipo === 'Uscita' ? 'USCITA' : 'MISTO') +
+            '</span><strong>' + iniziale + '</strong></div>' +
+            '<div class="calendar-item-body movement-item-body">' +
+            '<span class="calendar-tag">' + escape(tipo) + '</span>' +
+            '<h4>' + escape(movimento.descrizione || 'Movimento senza descrizione') + '</h4>' +
+            '<p>' + escape(formattaDataMovimento(movimento.data)) + '</p>' +
+            (dettagli.length ? '<p class="movement-details">' + dettagli.join(' · ') + '</p>' : '') +
+            '</div><strong class="movement-amount ' + (tipo === 'Uscita' ? 'is-expense' : tipo === 'Entrata' ? 'is-income' : '') +
+            '">' + segno + ' ' + escape(formattaValutaMovimento(importo)) + '</strong>' +
+            '</article>';
+    }).join('') || '<p class="notification-empty">Nessun movimento corrisponde ai filtri selezionati.</p>';
+
+    var countText = movimentiContabiliVisibili.length === 1 ? 'movimento visualizzato' : 'movimenti visualizzati';
+    status.innerText = movimentiContabiliVisibili.length + ' ' + countText +
+        (movimentiContabiliTotali > movimentiContabiliLimite
+            ? ' · mostrati gli ultimi ' + movimentiContabiliLimite + ' di ' + movimentiContabiliTotali
+            : '');
+}
+
+function esportaMovimentiFiltrati() {
+    if (!movimentiContabiliVisibili.length) {
+        showToast('Non ci sono movimenti da esportare con i filtri selezionati.', 'info');
+        return;
+    }
+
+    function campoCsv(valore) {
+        var testo = String(valore == null ? '' : valore).replace(/"/g, '""');
+        return /[;"\r\n]/.test(testo) ? '"' + testo + '"' : testo;
+    }
+    var righe = [['Data', 'Tipo', 'Descrizione', 'Importo', 'Controparte', 'Conto Dare', 'Conto Avere', 'Documento', 'Attività', 'Note']];
+    movimentiContabiliVisibili.forEach(function (movimento) {
+        righe.push([
+            formattaDataMovimento(movimento.data), movimento.tipo, movimento.descrizione,
+            (Number(movimento.importo) || 0).toFixed(2).replace('.', ','),
+            movimento.controparte, movimento.dare, movimento.avere,
+            movimento.documento, movimento.attivita, movimento.note
+        ]);
+    });
+
+    var contenuto = '\uFEFF' + righe.map(function (riga) {
+        return riga.map(campoCsv).join(';');
+    }).join('\r\n');
+    var url = URL.createObjectURL(new Blob([contenuto], { type: 'text/csv;charset=utf-8' }));
+    var link = document.createElement('a');
+    link.href = url;
+    link.download = 'Movimenti_Gens_' + new Date().toISOString().slice(0, 10) + '.csv';
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    setTimeout(function () { URL.revokeObjectURL(url); }, 1000);
+    showToast('Esportazione dei movimenti avviata.', 'success');
 }
 
 function renderReportView() {

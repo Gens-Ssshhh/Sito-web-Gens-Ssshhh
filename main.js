@@ -37,7 +37,8 @@ var AZIONI_API_CONSENTITE = [
   "getElezioniPerCandidatura", "getGruppiSpese", "getListaDocumenti", "getListaFornitori",
   "getListaSociPerSponsor", "getNomiSociAttivi", "getNotificheUtente",
   "getPianoDeiContiDinamico", "getPreferenzeNotifiche", "getPropostaEventoPubblica", "getProposteEventi",
-  "getRubricaCommerciale", "salvaContattoCommerciale",
+  "disattivaVoceListino", "getListinoPrezzi", "getMovimentiContabili",
+  "getRubricaCommerciale", "salvaContattoCommerciale", "salvaVoceListino",
   "getReportStorici", "getConfigurazioneNotificheGlobali", "salvaConfigurazioneNotificheGlobali", "ripristinaPreferenzeNotifiche", "salvaPreferenzeNotifiche", "getRichiesteFirmaUtente", "getRichiesteIscrizioneDaAvvallare",
   "getRispostaRicompilazioneOspite", "getRisultatiLive", "getSociPerFattura",
   "getStartData", "getStoricoFirmeUtente", "inviaCandidatura", "inviaLinkReset",
@@ -243,7 +244,9 @@ function doPost(e) {
 
     var azioneAmministrativa = /^admin/i.test(azione || "") || /Admin$/.test(azione || "") ||
       azione === "exportBilancioExcel" || azione === "configuraTriggerAmmissioni" ||
-      azione === "getRubricaCommerciale" || azione === "salvaContattoCommerciale";
+      azione === "getRubricaCommerciale" || azione === "salvaContattoCommerciale" ||
+      azione === "getMovimentiContabili" || azione === "salvaVoceListino" ||
+      azione === "disattivaVoceListino";
     if (azioneAmministrativa) {
       var utenteSessione = getDatiUtente(emailSessione);
       if (!utenteSessione || !isRuoloAmministrativo(utenteSessione.ruolo)) {
@@ -296,9 +299,13 @@ function doPost(e) {
         adminChiudiEGeneraRegistroFirme: 1,
         adminEliminaGruppoRichieste: 1,
         adminGetUltimiMovimentiPD: 0,
+        getMovimentiContabili: 0,
         adminChiudiEGeneraVerbale: 0,
         adminRigeneraVerbale: 0,
         configuraTriggerAmmissioni: 0,
+        getListinoPrezzi: 0,
+        salvaVoceListino: 0,
+        disattivaVoceListino: 0,
         exportBilancioExcel: 0
       };
       var indiceIdentita = indiceIdentitaAdmin[azione];

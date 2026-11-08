@@ -235,6 +235,131 @@ test('bilancio: esporta il foglio contabile corretto come CSV UTF-8 valido', () 
   assert.match(csv, /04\/03\/2026;Fatt\. 1;"Quota; ""annuale""";Banca;Quote;12,50;"Rossi\nMario"/);
 });
 
+test('movimenti: legge le ultime registrazioni e calcola entrate, uscite e saldo', () => {
+  const rows = [
+    ['Data', 'Descrizione', 'Conto_Dare', 'Conto_Avere', 'Importo', 'Controparte', 'CF/PIVA', 'Attivita', 'N_Doc', 'Note'],
+    [new Date(2026, 8, 1), 'Canone sede', 'Affitti', 'Banca C/C', 100, 'Proprietario', '', 'Istituzionale', 'F1', ''],
+    ['2026-09-02', 'Quota associativa', 'Banca C/C', 'Quote associative', '1.234,56', 'Mario Rossi', 'RSSMRA80A01F205X', 'Istituzionale', 'E2', 'Quota annuale'],
+    ['03/09/2026', 'Giroconto', 'Banca C/C', 'Cassa Contanti', 50, '', '', '', '', ''],
+    ['2026-09-04', 'Rettifica', 'Sopravvenienze', 'Proventi', 25, '', '', '', '', '']
+  ];
+  const sheet = { getDataRange: () => ({ getValues: () => rows }) };
+  let emailConsultata = null;
+  const context = {
+    ID_FOGLIO_CONTABILITA: 'contabilita',
+    getDatiUtente: email => { emailConsultata = email; return { ruolo: 'Tesoriere' }; },
+    isRuoloAmministrativo: ruolo => ruolo === 'Tesoriere',
+    SpreadsheetApp: {
+      openById: id => {
+        assert.equal(id, 'contabilita');
+        return { getSheetByName: name => name === 'bilancio' ? sheet : null };
+      }
+    },
+    Utilities: {
+      formatDate: date => `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`
+    }
+  };
+  loadScript('Finance.js', context);
+
+  const result = JSON.parse(JSON.stringify(context.getMovimentiContabili('tesoriere@example.it')));
+  assert.equal(emailConsultata, 'tesoriere@example.it');
+  assert.deepEqual(result.riepilogo, { entrate: 1259.56, uscite: 125, netto: 1134.56 });
+  assert.equal(result.totaleMovimenti, 3);
+  assert.equal(result.movimenti[0].descrizione, 'Rettifica');
+  assert.equal(result.movimenti[1].importo, 1234.56);
+  assert.equal(result.movimenti[1].isEntrata, true);
+  assert.equal(result.movimenti[2].data, '2026-09-01');
+
+  context.getDatiUtente = () => ({ ruolo: 'Socio semplice' });
+  assert.equal(context.getMovimentiContabili('socio@example.it'), 'NO_AUTH');
+});
+
+test('listino: gestisce voci e prezzi persistenti e nasconde quelle disattivate ai soci', () => {
+  const rows = [['']];
+  const sheet = {
+    getDataRange: () => ({ getValues: () => rows.map(row => row.slice()) }),
+    getLastRow: () => rows.length,
+    getRange(row, column, rowCount, columnCount) {
+      return {
+        setValues(values) {
+          values.forEach((value, rowOffset) => {
+            rows[row - 1 + rowOffset] = value.slice(0, columnCount);
+          });
+        },
+        setValue(value) { rows[row - 1][column - 1] = value; }
+      };
+    },
+    appendRow(row) { rows.push(row.slice()); }
+  };
+  const users = {
+    'admin@example.it': { ruolo: 'Tesoriere' },
+    'socio@example.it': { ruolo: 'Socio semplice' }
+  };
+  let uuid = 0;
+  const context = {
+    ID_FOGLIO_CONTABILITA: 'contabilita',
+    getDatiUtente: email => users[email] || null,
+    isRuoloAmministrativo: ruolo => ruolo === 'Tesoriere',
+    Utilities: { getUuid: () => 'voce-' + (++uuid) },
+    SpreadsheetApp: {
+      openById: id => {
+        assert.equal(id, 'contabilita');
+        return {
+          getSheetByName: name => name === 'listino' ? sheet : null,
+          insertSheet: name => {
+            assert.equal(name, 'listino');
+            return sheet;
+          }
+        };
+      }
+    }
+  };
+  loadScript('Finance.js', context);
+
+  const creata = context.salvaVoceListino('admin@example.it', {
+    nome: 'Quota annuale', descrizione: 'Accesso alle attività', categoria: 'Soci',
+    tipo: 'Servizio', prezzo: '120,50', attivo: true
+  });
+  assert.equal(creata.ok, true);
+  assert.equal(rows[0][4], 'Tipo');
+  assert.equal(rows[1][0], 'voce-1');
+  assert.equal(rows[1][5], 120.5);
+  assert.equal(context.getListinoPrezzi('admin@example.it').length, 1);
+  assert.equal(context.getListinoPrezzi('socio@example.it').length, 1);
+  assert.equal(context.salvaVoceListino('admin@example.it', {
+    nome: 'Prezzo non valido', categoria: 'Soci', tipo: 'Servizio', prezzo: 'Infinity'
+  }).ok, false);
+
+  const pacchetto = context.salvaVoceListino('admin@example.it', {
+    nome: 'Sponsor base', descrizione: '', categoria: 'Sponsor',
+    tipo: 'Pacchetto', prezzo: '250.00', attivo: true
+  });
+  assert.equal(pacchetto.ok, true);
+  assert.equal(context.salvaVoceListino('admin@example.it', {
+    nome: 'Quota annuale', categoria: 'Soci', tipo: 'Servizio', prezzo: 1
+  }).ok, false);
+
+  const aggiornata = context.salvaVoceListino('admin@example.it', {
+    id: 'voce-1', nome: 'Quota annuale aggiornata', descrizione: '',
+    categoria: 'Soci', tipo: 'Servizio', prezzo: '130', attivo: true
+  });
+  assert.equal(aggiornata.ok, true);
+  assert.equal(rows[1][5], 130);
+  assert.equal(context.disattivaVoceListino('admin@example.it', 'voce-1').ok, true);
+  assert.equal(context.getListinoPrezzi('socio@example.it').length, 1);
+  assert.equal(context.getListinoPrezzi('admin@example.it')[0].attivo, false);
+  assert.equal(context.salvaVoceListino('admin@example.it', {
+    id: 'voce-1', nome: 'Quota annuale aggiornata', descrizione: '',
+    categoria: 'Soci', tipo: 'Servizio', prezzo: '130', attivo: true
+  }).ok, true);
+  assert.equal(context.getListinoPrezzi('socio@example.it').length, 2);
+  assert.equal(context.salvaVoceListino('socio@example.it', {
+    nome: 'Non autorizzato', categoria: 'Soci', tipo: 'Servizio', prezzo: 10
+  }), 'NO_AUTH');
+  assert.equal(context.disattivaVoceListino('socio@example.it', 'voce-2'), 'NO_AUTH');
+  assert.equal(context.getListinoPrezzi('utente-sconosciuto@example.it'), 'NO_AUTH');
+});
+
 test('rubrica commerciale: legge saldi da bilancio e crea o aggiorna contatti', () => {
   function mutableSheet(rows) {
     return {
@@ -1651,6 +1776,10 @@ test('api: crea sessioni dopo il login e vincola le azioni admin all’identità
   let promemoriaPayload = null;
   let rubricaRequestCount = 0;
   let saveContactRequestCount = 0;
+  let movimentiRequestEmail = null;
+  let listinoRequestEmail = null;
+  let listinoSaveEmail = null;
+  let listinoDeleteEmail = null;
   let datiUtenteRichiesti = null;
   let tokenCounter = 0;
   const context = {
@@ -1682,6 +1811,10 @@ test('api: crea sessioni dopo il login e vincola le azioni admin all’identità
     adminUpdateSocio: dati => { updatePayload = dati; return 'OK'; },
     getRubricaCommerciale: () => { rubricaRequestCount++; return []; },
     salvaContattoCommerciale: () => { saveContactRequestCount++; return { ok: true }; },
+    getMovimentiContabili: email => { movimentiRequestEmail = email; return { movimenti: [] }; },
+    getListinoPrezzi: email => { listinoRequestEmail = email; return []; },
+    salvaVoceListino: (email, dati) => { listinoSaveEmail = email; return { ok: true, dati }; },
+    disattivaVoceListino: (email, id) => { listinoDeleteEmail = email; return { ok: true, id }; },
     inviaPromemoriaVotoPropostaEvento: (email, propostaId) => {
       promemoriaPayload = { email, propostaId };
       return { ok: true, inviati: 1 };
@@ -1728,10 +1861,58 @@ test('api: crea sessioni dopo il login e vincola le azioni admin all’identità
   assert.equal(salvataggioNegato.status, 'ERROR');
   assert.equal(rubricaRequestCount, 0);
   assert.equal(saveContactRequestCount, 0);
+  const movimentiNegati = rispostaEndpoint({
+    azione: 'getMovimentiContabili',
+    token: memberLogin.token,
+    payload: 'admin@example.it'
+  });
+  assert.equal(movimentiNegati.status, 'ERROR');
+  assert.equal(movimentiRequestEmail, null);
+  const listinoSocio = rispostaEndpoint({
+    azione: 'getListinoPrezzi', token: memberLogin.token, payload: 'admin@example.it'
+  });
+  assert.equal(listinoSocio.status, 'SUCCESS');
+  assert.equal(listinoRequestEmail, 'member@example.it');
+  const salvaListinoNegata = rispostaEndpoint({
+    azione: 'salvaVoceListino',
+    token: memberLogin.token,
+    payload: ['admin@example.it', { nome: 'Voce non autorizzata' }]
+  });
+  assert.equal(salvaListinoNegata.status, 'ERROR');
+  const eliminaListinoNegata = rispostaEndpoint({
+    azione: 'disattivaVoceListino', token: memberLogin.token, payload: ['admin@example.it', 'voce-1']
+  });
+  assert.equal(eliminaListinoNegata.status, 'ERROR');
+  assert.equal(listinoSaveEmail, null);
+  assert.equal(listinoDeleteEmail, null);
 
   const rubricaAdmin = rispostaEndpoint({ azione: 'getRubricaCommerciale', token: login.token });
   assert.equal(rubricaAdmin.status, 'SUCCESS');
   assert.equal(rubricaRequestCount, 1);
+  const movimentiAdmin = rispostaEndpoint({
+    azione: 'getMovimentiContabili',
+    token: login.token,
+    payload: 'other-admin@example.it'
+  });
+  assert.equal(movimentiAdmin.status, 'SUCCESS');
+  assert.equal(movimentiRequestEmail, 'admin@example.it');
+  const listinoAdmin = rispostaEndpoint({
+    azione: 'getListinoPrezzi', token: login.token, payload: 'other-admin@example.it'
+  });
+  assert.equal(listinoAdmin.status, 'SUCCESS');
+  assert.equal(listinoRequestEmail, 'admin@example.it');
+  const salvaListino = rispostaEndpoint({
+    azione: 'salvaVoceListino',
+    token: login.token,
+    payload: ['other-admin@example.it', { nome: 'Quota', categoria: 'Soci', tipo: 'Servizio', prezzo: 120 }]
+  });
+  assert.equal(salvaListino.status, 'SUCCESS');
+  assert.equal(listinoSaveEmail, 'admin@example.it');
+  const eliminaListino = rispostaEndpoint({
+    azione: 'disattivaVoceListino', token: login.token, payload: ['other-admin@example.it', 'voce-1']
+  });
+  assert.equal(eliminaListino.status, 'SUCCESS');
+  assert.equal(listinoDeleteEmail, 'admin@example.it');
 
   const promemoria = rispostaEndpoint({
     azione: 'inviaPromemoriaVotoPropostaEvento',

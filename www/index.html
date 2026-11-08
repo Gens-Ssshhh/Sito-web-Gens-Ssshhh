@@ -997,9 +997,9 @@
                         <div>
                             <span class="section-kicker">Contabilità</span>
                             <h2>Listino prezzi</h2>
-                            <p>Catalogo dei servizi e delle offerte disponibili per soci, volontari e partner.</p>
+                            <p>Catalogo dei servizi e dei pacchetti associativi con prezzi aggiornati.</p>
                         </div>
-                        <div class="club-status-badge"><span class="sidebar-status-dot"></span> Catalogo attivo</div>
+                        <div class="club-status-badge"><span class="sidebar-status-dot"></span> Catalogo condiviso</div>
                     </div>
 
                     <div class="club-summary-grid">
@@ -1019,9 +1019,72 @@
 
                     <div class="calendar-panel">
                         <div class="calendar-header-row">
-                            <h3>Catalogo disponibile</h3>
-                            <button class="compact-action" onclick="renderListinoPrezziView()">Aggiorna</button>
+                            <div>
+                                <h3>Catalogo disponibile</h3>
+                                <p id="listinoPrezziCaption" class="movement-list-caption">Voci attive del listino</p>
+                            </div>
+                            <div class="listino-actions">
+                                <button class="compact-action" type="button" onclick="renderListinoPrezziView()">Aggiorna</button>
+                                <button id="listinoAddButton" class="btn-primary listino-add-button hidden" type="button"
+                                    onclick="apriVoceListino()">+ Nuova voce</button>
+                            </div>
                         </div>
+                        <div id="listinoFormPanel" class="listino-form-panel hidden">
+                            <div class="calendar-header-row">
+                                <h3 id="listinoFormTitle">Nuova voce</h3>
+                                <button class="compact-action" type="button" onclick="chiudiVoceListino()">Annulla</button>
+                            </div>
+                            <form id="listinoForm" onsubmit="salvaVoceListino(event)">
+                                <input id="listinoVoceId" type="hidden">
+                                <div class="listino-form-fields">
+                                    <label>Nome
+                                        <input id="listinoNome" class="form-input" maxlength="120" required>
+                                    </label>
+                                    <label>Tipo
+                                        <select id="listinoTipo" class="form-input" required>
+                                            <option value="Servizio">Servizio</option>
+                                            <option value="Pacchetto">Pacchetto</option>
+                                        </select>
+                                    </label>
+                                    <label>Categoria / Destinatari
+                                        <input id="listinoCategoria" class="form-input" maxlength="60" required
+                                            placeholder="Es. Soci, Eventi, Sponsor">
+                                    </label>
+                                    <label>Prezzo (€)
+                                        <input id="listinoPrezzoInput" class="form-input" type="number" min="0"
+                                            max="999999999" step="0.01" required>
+                                    </label>
+                                    <label class="listino-description-field">Descrizione
+                                        <textarea id="listinoDescrizione" class="form-input" rows="3" maxlength="500"></textarea>
+                                    </label>
+                                    <label class="listino-active-toggle">
+                                        <input id="listinoAttivo" type="checkbox" checked>
+                                        Voce attiva e visibile nel catalogo
+                                    </label>
+                                </div>
+                                <div class="listino-form-footer">
+                                    <p id="listinoFormMessage" role="status" aria-live="polite"></p>
+                                    <button class="btn-primary" type="submit">Salva voce</button>
+                                </div>
+                            </form>
+                        </div>
+                        <div class="listino-toolbar">
+                            <label class="sr-only" for="listinoSearch">Cerca nel listino</label>
+                            <input id="listinoSearch" class="form-input" type="search"
+                                placeholder="Cerca per nome o descrizione" oninput="filtraListinoPrezzi()">
+                            <label>Tipo
+                                <select id="listinoFilterType" class="form-input" onchange="filtraListinoPrezzi()">
+                                    <option value="Tutti">Tutti</option>
+                                    <option value="Servizio">Servizi</option>
+                                    <option value="Pacchetto">Pacchetti</option>
+                                </select>
+                            </label>
+                            <label id="listinoInactiveFilter" class="listino-inactive-filter hidden">
+                                <input id="listinoShowInactive" type="checkbox" onchange="filtraListinoPrezzi()">
+                                Includi voci disattivate
+                            </label>
+                        </div>
+                        <p id="listinoStatus" class="listino-status" role="status" aria-live="polite"></p>
                         <div id="listinoPrezziList" class="calendar-list"></div>
                     </div>
                 </div>
@@ -1039,24 +1102,51 @@
 
                     <div class="club-summary-grid">
                         <div class="club-summary-card">
-                            <span>Entrate</span>
+                            <span>Entrate complessive</span>
                             <strong id="movimentiEntrate">€0</strong>
                         </div>
                         <div class="club-summary-card">
-                            <span>Uscite</span>
+                            <span>Uscite complessive</span>
                             <strong id="movimentiUscite">€0</strong>
                         </div>
                         <div class="club-summary-card">
-                            <span>Netto</span>
+                            <span>Saldo netto</span>
                             <strong id="movimentiNetto">€0</strong>
                         </div>
                     </div>
 
                     <div class="calendar-panel">
                         <div class="calendar-header-row">
-                            <h3>Ultimi movimenti</h3>
-                            <button class="compact-action" onclick="renderMovimentiView()">Aggiorna</button>
+                            <div>
+                                <h3>Prima nota</h3>
+                                <p id="movimentiListCaption" class="movement-list-caption">Movimenti registrati nel bilancio</p>
+                            </div>
+                            <div class="movement-actions">
+                                <button class="compact-action" type="button" onclick="renderMovimentiView()">Aggiorna</button>
+                                <button class="compact-action" type="button" onclick="esportaMovimentiFiltrati()">Esporta CSV</button>
+                            </div>
                         </div>
+                        <div class="movement-filters">
+                            <label class="movement-search-field">Cerca
+                                <input id="movimentiSearch" class="form-input" type="search"
+                                    placeholder="Descrizione, controparte o conto" oninput="filtraMovimenti()">
+                            </label>
+                            <label>Tipo
+                                <select id="movimentiTypeFilter" class="form-input" onchange="filtraMovimenti()">
+                                    <option value="Tutti">Tutti i movimenti</option>
+                                    <option value="Entrata">Entrate</option>
+                                    <option value="Uscita">Uscite</option>
+                                    <option value="Misto">Misti</option>
+                                </select>
+                            </label>
+                            <label>Dal
+                                <input id="movimentiDateFrom" class="form-input" type="date" onchange="filtraMovimenti()">
+                            </label>
+                            <label>Al
+                                <input id="movimentiDateTo" class="form-input" type="date" onchange="filtraMovimenti()">
+                            </label>
+                        </div>
+                        <p id="movimentiStatus" class="movement-status" role="status" aria-live="polite"></p>
                         <div id="movimentiList" class="calendar-list"></div>
                     </div>
                 </div>

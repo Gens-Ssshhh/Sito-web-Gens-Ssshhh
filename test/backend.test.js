@@ -235,6 +235,82 @@ test('bilancio: esporta il foglio contabile corretto come CSV UTF-8 valido', () 
   assert.match(csv, /04\/03\/2026;Fatt\. 1;"Quota; ""annuale""";Banca;Quote;12,50;"Rossi\nMario"/);
 });
 
+test('rubrica commerciale: legge saldi da bilancio e crea o aggiorna contatti', () => {
+  function mutableSheet(rows) {
+    return {
+      getDataRange: () => ({ getValues: () => rows.map(row => row.slice()) }),
+      getLastRow: () => rows.length,
+      getRange(row, column, rowCount, columnCount) {
+        return {
+          setValues(values) {
+            values.forEach((value, rowOffset) => {
+              rows[row - 1 + rowOffset] = value.slice(0, columnCount);
+            });
+          }
+        };
+      },
+      appendRow(row) { rows.push(row.slice()); }
+    };
+  }
+
+  const fornitoriRows = [
+    ['Fornitore', 'Partita IVA', 'Codice SDI', 'Indirizzo', 'CAP', 'Comune', 'Provincia'],
+    ['Sede e Impianti SRL', '12345678901', '', 'Via Roma 1', '40100', 'Bologna', 'BO']
+  ];
+  const clientiRows = [['']];
+  const bilancioRows = [
+    ['Data', 'Descrizione', 'Conto_Dare', 'Conto_Avere', 'Importo', 'Controparte'],
+    ['', '', '', 'Debiti v/Fornitori', 240, 'Sede e Impianti SRL'],
+    ['', '', 'Debiti v/Fornitori', '', 40, 'Sede e Impianti SRL'],
+    ['', '', 'Crediti v/Clienti (Commerciale)', '', 300, 'Evento Primavera'],
+    ['', '', '', 'Crediti v/Clienti (Commerciale)', 50, 'Evento Primavera']
+  ];
+  const fornitori = mutableSheet(fornitoriRows);
+  const clienti = mutableSheet(clientiRows);
+  const bilancio = mutableSheet(bilancioRows);
+  const sheets = { fornitori, clienti, bilancio };
+  const context = {
+    ID_FOGLIO_CONTABILITA: 'contabilita',
+    SpreadsheetApp: {
+      openById: () => ({
+        getSheetByName: name => sheets[name] || null,
+        insertSheet(name) {
+          sheets[name] = mutableSheet([['']]);
+          return sheets[name];
+        }
+      })
+    }
+  };
+  loadScript('Finance.js', context);
+
+  const rubrica = JSON.parse(JSON.stringify(context.getRubricaCommerciale()));
+  assert.equal(rubrica.length, 1);
+  assert.equal(rubrica[0].partitaIva, '12345678901');
+  assert.equal(rubrica[0].saldo, 200);
+
+  const nuovo = context.salvaContattoCommerciale({
+    tipo: 'Cliente', nome: 'Evento Primavera', partitaIva: '98765432109'
+  });
+  assert.equal(nuovo.ok, true);
+  assert.equal(clientiRows[0][0], 'Cliente');
+  assert.equal(clientiRows[1][0], 'Evento Primavera');
+  assert.equal(context.getRubricaCommerciale()[1].saldo, -250);
+
+  const aggiornato = context.salvaContattoCommerciale({
+    tipo: 'Fornitore', riga: 2, nomeAtteso: 'Sede e Impianti SRL',
+    nome: 'Sede Impianti', comune: 'Modena'
+  });
+  assert.equal(aggiornato.ok, true);
+  assert.equal(fornitoriRows[1][0], 'Sede Impianti');
+  assert.equal(fornitoriRows[1][5], 'Modena');
+  assert.equal(context.salvaContattoCommerciale({
+    tipo: 'Fornitore', riga: 2, nomeAtteso: 'Nome errato', nome: 'Modificato'
+  }).ok, false);
+  assert.equal(context.salvaContattoCommerciale({
+    tipo: 'Cliente', nome: 'Evento Primavera'
+  }).ok, false);
+});
+
 test('fatture: XML e PDF riportano regime, bollo, scadenza e pagamento', () => {
   const sociRows = [
     ['Nome', 'Password', 'Email', '', 'Cognome', '', 'Indirizzo', '', '', 'Numero Tessera', 'Data Scadenza', 'Stato Socio', 'Carica sociale', '', 'Codice Fiscale', '', '', '', 'ID_Univoco', 'CAP res', 'Comune res'],
@@ -1573,6 +1649,8 @@ test('api: crea sessioni dopo il login e vincola le azioni admin all’identità
   const properties = new Map();
   let updatePayload = null;
   let promemoriaPayload = null;
+  let rubricaRequestCount = 0;
+  let saveContactRequestCount = 0;
   let datiUtenteRichiesti = null;
   let tokenCounter = 0;
   const context = {
@@ -1602,6 +1680,8 @@ test('api: crea sessioni dopo il login e vincola le azioni admin all’identità
       })
     },
     adminUpdateSocio: dati => { updatePayload = dati; return 'OK'; },
+    getRubricaCommerciale: () => { rubricaRequestCount++; return []; },
+    salvaContattoCommerciale: () => { saveContactRequestCount++; return { ok: true }; },
     inviaPromemoriaVotoPropostaEvento: (email, propostaId) => {
       promemoriaPayload = { email, propostaId };
       return { ok: true, inviati: 1 };
@@ -1638,6 +1718,21 @@ test('api: crea sessioni dopo il login e vincola le azioni admin all’identità
   assert.equal(datiUtenteRichiesti, 'admin@example.it');
 
   const memberLogin = rispostaEndpoint({ azione: 'login', email: 'member@example.it', password: 'pw' });
+  const rubricaNegata = rispostaEndpoint({ azione: 'getRubricaCommerciale', token: memberLogin.token });
+  assert.equal(rubricaNegata.status, 'ERROR');
+  const salvataggioNegato = rispostaEndpoint({
+    azione: 'salvaContattoCommerciale',
+    token: memberLogin.token,
+    payload: { tipo: 'Cliente', nome: 'Contatto non autorizzato' }
+  });
+  assert.equal(salvataggioNegato.status, 'ERROR');
+  assert.equal(rubricaRequestCount, 0);
+  assert.equal(saveContactRequestCount, 0);
+
+  const rubricaAdmin = rispostaEndpoint({ azione: 'getRubricaCommerciale', token: login.token });
+  assert.equal(rubricaAdmin.status, 'SUCCESS');
+  assert.equal(rubricaRequestCount, 1);
+
   const promemoria = rispostaEndpoint({
     azione: 'inviaPromemoriaVotoPropostaEvento',
     token: memberLogin.token,

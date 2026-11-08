@@ -5433,6 +5433,117 @@ textarea {
   gap: 14px;
 }
 
+.commercial-actions,
+.commercial-list-toolbar,
+.commercial-filter-group,
+.commercial-contact-heading,
+.commercial-form-footer {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.commercial-contact-form {
+  margin-bottom: 20px;
+  padding: 18px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: #f8fafc;
+}
+
+.commercial-contact-form .calendar-header-row {
+  margin-bottom: 14px;
+}
+
+.commercial-contact-form .calendar-header-row h3 {
+  font-size: 16px;
+}
+
+.commercial-contact-fields {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.commercial-contact-fields label {
+  display: grid;
+  gap: 6px;
+  color: var(--navy);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.commercial-form-footer {
+  justify-content: space-between;
+  margin-top: 14px;
+}
+
+.commercial-form-footer p,
+.commercial-status {
+  margin: 0;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.commercial-list-toolbar {
+  justify-content: space-between;
+  margin-bottom: 16px;
+}
+
+.commercial-list-toolbar > .form-input {
+  max-width: 360px;
+}
+
+.commercial-filter {
+  padding: 8px 12px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: white;
+  color: var(--muted);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.commercial-filter.active {
+  border-color: rgba(30, 64, 175, 0.2);
+  background: #eef4ff;
+  color: #1e40af;
+  font-weight: 700;
+}
+
+.commercial-contact-card {
+  background: #f8fafc;
+}
+
+.commercial-contact-heading {
+  justify-content: space-between;
+}
+
+.commercial-contact-heading h4 {
+  margin: 5px 0 2px;
+}
+
+.commercial-contact-muted {
+  color: var(--muted);
+}
+
+.commercial-contact-balance {
+  margin-top: 7px !important;
+  color: var(--navy) !important;
+  font-size: 12px !important;
+  font-weight: 600;
+}
+
+.commercial-contact-balance.is-negative {
+  color: #b45309 !important;
+}
+
+.commercial-status {
+  min-height: 16px;
+  margin: 0 0 10px;
+}
+
 #viewCalendario .calendar-proposals-panel {
   padding: clamp(18px, 2.4vw, 28px);
 }
@@ -5953,6 +6064,38 @@ textarea {
 }
 
 @media (max-width: 600px) {
+  .commercial-actions,
+  .commercial-list-toolbar,
+  .commercial-form-footer {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .commercial-actions {
+    width: 100%;
+  }
+
+  .commercial-list-toolbar > .form-input {
+    max-width: none;
+    width: 100%;
+  }
+
+  .commercial-filter-group {
+    width: 100%;
+  }
+
+  .commercial-filter {
+    flex: 1;
+  }
+
+  .commercial-contact-fields {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .commercial-contact-heading {
+    align-items: flex-start;
+  }
+
   #viewCalendario .calendar-proposals-panel {
     padding: 16px;
   }
@@ -6475,5 +6618,163 @@ textarea {
     align-self: end;
     margin: auto 0 8px;
     border-radius: 16px 16px 10px 10px;
+  }
+}
+
+.cabina-modal-card {
+  box-sizing: border-box;
+}
+
+.cabina-odg-table {
+  table-layout: fixed;
+}
+
+.cabina-odg-table th,
+.cabina-odg-point,
+.cabina-odg-vote {
+  padding: 12px;
+  border: 1px solid #e2e8f0;
+}
+
+.cabina-odg-table th {
+  background: #f1f5f9;
+  text-align: left;
+}
+
+.cabina-odg-table th:last-child {
+  width: 240px;
+  text-align: center;
+}
+
+.cabina-odg-point {
+  color: #0f172a;
+  font-weight: 500;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+
+.cabina-odg-vote {
+  text-align: center;
+  vertical-align: middle;
+}
+
+.cabina-vote-choices {
+  display: flex;
+  justify-content: center;
+  gap: 6px;
+}
+
+.cabina-vote-choice {
+  display: flex;
+  flex: 1 1 0;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  min-width: 0;
+  min-height: 58px;
+  padding: 6px 4px;
+  border-radius: 8px;
+  font-size: 11px;
+  line-height: 1.2;
+  cursor: pointer;
+}
+
+.cabina-vote-choice input {
+  width: 18px;
+  height: 18px;
+  margin: 0;
+}
+
+.cabina-vote-favor {
+  background: #dcfce7;
+  color: #166534;
+}
+
+.cabina-vote-against {
+  background: #fee2e2;
+  color: #991b1b;
+}
+
+.cabina-vote-abstain {
+  background: #f1f5f9;
+  color: #475569;
+}
+
+@media (max-width: 600px) {
+  #modalCabinaElettorale {
+    box-sizing: border-box;
+    padding: 12px;
+  }
+
+  #modalCabinaElettorale .cabina-modal-card {
+    width: 100% !important;
+    max-height: calc(100dvh - 24px) !important;
+    padding: 18px 14px !important;
+    border-radius: 16px;
+  }
+
+  #modalCabinaElettorale .cabina-odg-table {
+    display: block;
+    width: 100%;
+    border: 0 !important;
+  }
+
+  #modalCabinaElettorale .cabina-odg-table thead {
+    display: none;
+  }
+
+  #modalCabinaElettorale .cabina-odg-table tbody {
+    display: grid;
+    gap: 12px;
+  }
+
+  #modalCabinaElettorale .riga-odg {
+    display: block;
+    overflow: hidden;
+    border: 1px solid #dbe3ec;
+    border-radius: 10px;
+    background: #fff;
+  }
+
+  #modalCabinaElettorale .cabina-odg-point,
+  #modalCabinaElettorale .cabina-odg-vote {
+    display: block;
+    width: auto;
+    border: 0;
+    text-align: left;
+  }
+
+  #modalCabinaElettorale .cabina-odg-point {
+    padding: 14px;
+    font-size: 14px;
+  }
+
+  #modalCabinaElettorale .cabina-odg-vote {
+    padding: 10px 12px 12px;
+    border-top: 1px solid #e2e8f0;
+    background: #f8fafc;
+  }
+
+  #modalCabinaElettorale .cabina-vote-choices {
+    gap: 8px;
+  }
+
+  #modalCabinaElettorale .cabina-vote-choice {
+    min-height: 62px;
+    padding: 7px 3px;
+    font-size: 11px;
+  }
+
+  #modalCabinaElettorale .cabina-modal-actions {
+    flex-direction: column-reverse;
+    margin-top: 18px !important;
+  }
+
+  #modalCabinaElettorale .cabina-modal-actions button {
+    width: 100% !important;
+    min-height: 48px;
+    padding: 10px 14px !important;
+    white-space: normal;
   }
 }

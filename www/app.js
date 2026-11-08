@@ -656,39 +656,172 @@ function renderSociVolontariView() {
     });
 }
 
-function renderFornitoriClientiView() {
+var fornitoriClientiContatti = [];
+var fornitoriClientiFiltro = 'Tutti';
+var fornitoriClientiNomeInModifica = '';
+
+async function renderFornitoriClientiView() {
     var list = document.getElementById('fornitoriClientiList');
+    var status = document.getElementById('commercialContactStatus');
+    if (!list || !status) return;
+
+    if (!utenteCorrenteHaRuoloAdmin()) {
+        status.innerText = 'La rubrica commerciale è riservata agli amministratori.';
+        list.innerHTML = '';
+        return;
+    }
+
+    status.innerText = 'Caricamento rubrica...';
+    try {
+        var contatti = await chiamaServer('getRubricaCommerciale', {}, true);
+        if (!Array.isArray(contatti)) throw new Error('Il server non ha restituito una rubrica valida.');
+        fornitoriClientiContatti = contatti;
+        var fornitori = contatti.filter(function (item) { return item.tipo === 'Fornitore'; }).length;
+        var clienti = contatti.filter(function (item) { return item.tipo === 'Cliente'; }).length;
+        var saldo = contatti.reduce(function (totale, item) { return totale + (Number(item.saldo) || 0); }, 0);
+        var valuta = new Intl.NumberFormat('it-IT', { style: 'currency', currency: 'EUR' });
+
+        document.getElementById('fornitoriClientiCount').innerText = String(fornitori);
+        document.getElementById('fornitoriClientiClienti').innerText = String(clienti);
+        document.getElementById('fornitoriClientiSaldo').innerText = valuta.format(saldo);
+        status.innerText = contatti.length + (contatti.length === 1 ? ' contatto in rubrica.' : ' contatti in rubrica.');
+        filtraContattiCommerciali();
+    } catch (error) {
+        console.error('Impossibile caricare la rubrica commerciale:', error);
+        status.innerText = error.message || 'Impossibile caricare la rubrica commerciale.';
+        list.innerHTML = '';
+    }
+}
+
+function filtraContattiCommerciali() {
+    var list = document.getElementById('fornitoriClientiList');
+    var search = document.getElementById('commercialContactSearch');
     if (!list) return;
 
-    var contatti = [
-        { tipo: 'Fornitore', nome: 'Sede e Impianti SRL', contatto: 'info@sedeimpianti.it', saldo: 1240.50, stato: 'In regola' },
-        { tipo: 'Cliente', nome: 'Evento Club Primavera', contatto: 'eventi@club.it', saldo: -860.00, stato: 'Da regolare' },
-        { tipo: 'Fornitore', nome: 'Grafica & Stampa', contatto: 'office@graficastampa.it', saldo: 580.00, stato: 'In regola' },
-        { tipo: 'Cliente', nome: 'Riunione Mensile', contatto: 'segretario@associazione.it', saldo: -420.00, stato: 'Da regolare' },
-        { tipo: 'Fornitore', nome: 'Logistica Social', contatto: 'support@logistica.social', saldo: 930.00, stato: 'In regola' }
-    ];
-
-    var fornitori = contatti.filter(function (item) { return item.tipo === 'Fornitore'; }).length;
-    var clienti = contatti.filter(function (item) { return item.tipo === 'Cliente'; }).length;
-    var saldo = contatti.reduce(function (totale, item) { return totale + item.saldo; }, 0);
-
-    document.getElementById('fornitoriClientiCount').innerText = String(fornitori);
-    document.getElementById('fornitoriClientiClienti').innerText = String(clienti);
-    document.getElementById('fornitoriClientiSaldo').innerText = '€' + saldo.toFixed(2).replace('.', ',');
+    var query = search ? search.value.trim().toLocaleLowerCase('it') : '';
+    var contatti = fornitoriClientiContatti.filter(function (item) {
+        if (fornitoriClientiFiltro !== 'Tutti' && item.tipo !== fornitoriClientiFiltro) return false;
+        return !query || [
+            item.nome, item.partitaIva, item.codiceSdi, item.indirizzo,
+            item.cap, item.comune, item.provincia
+        ].some(function (valore) {
+            return String(valore || '').toLocaleLowerCase('it').indexOf(query) !== -1;
+        });
+    });
 
     list.innerHTML = contatti.map(function (item) {
-        var segno = item.saldo >= 0 ? '+' : '-';
-        var saldoFormattato = '€' + Math.abs(item.saldo).toFixed(2).replace('.', ',');
-        return '<article class="calendar-item">' +
-            '<div class="calendar-date-pill"><span>' + item.tipo.slice(0, 3).toUpperCase() + '</span><strong>' + (item.tipo === 'Fornitore' ? 'F' : 'C') + '</strong></div>' +
+        var escape = escapeActionCenterText;
+        var saldo = Number(item.saldo) || 0;
+        var saldoTesto = new Intl.NumberFormat('it-IT', {
+            style: 'currency', currency: 'EUR'
+        }).format(Math.abs(saldo));
+        var saldoStato = saldo !== 0 ? 'Da regolare' : 'In regola';
+        var localita = [item.cap, item.comune, item.provincia].filter(Boolean).join(' ');
+        var dettagli = [
+            item.partitaIva ? 'P. IVA / CF ' + escape(item.partitaIva) : '',
+            item.codiceSdi ? 'SDI ' + escape(item.codiceSdi) : '',
+            item.indirizzo ? escape(item.indirizzo) : '',
+            localita ? escape(localita) : ''
+        ].filter(Boolean);
+
+        return '<article class="calendar-item commercial-contact-card">' +
+            '<div class="calendar-date-pill"><span>' + (item.tipo === 'Fornitore' ? 'FOR' : 'CLI') + '</span><strong>' + (item.tipo === 'Fornitore' ? 'F' : 'C') + '</strong></div>' +
             '<div class="calendar-item-body">' +
-            '<span class="calendar-tag">' + item.stato + '</span>' +
-            '<h4>' + item.nome + '</h4>' +
-            '<p>' + item.contatto + '</p>' +
-            '<p style="margin-top:6px; font-size:11px; color:#64748b;">Saldo ' + segno + ' ' + saldoFormattato + '</p>' +
-            '</div>' +
-            '</article>';
-    }).join('') || '<p class="notification-empty">Nessun contatto commerciale disponibile.</p>';
+            '<div class="commercial-contact-heading"><div><span class="calendar-tag">' + escape(saldoStato) + '</span>' +
+            '<h4>' + escape(item.nome) + '</h4></div>' +
+            '<button type="button" class="compact-action" onclick="modificaContattoCommerciale(' + Number(item.riga) + ', \'' + item.tipo + '\')">Modifica</button></div>' +
+            (dettagli.length ? '<p>' + dettagli.join(' · ') + '</p>' : '<p class="commercial-contact-muted">Nessun dato aggiuntivo</p>') +
+            '<p class="commercial-contact-balance ' + (saldo < 0 ? 'is-negative' : '') + '">Saldo ' +
+            (saldo > 0 ? '+ ' : saldo < 0 ? '− ' : '') + saldoTesto + '</p>' +
+            '</div></article>';
+    }).join('') || '<p class="notification-empty">Nessun contatto corrisponde ai filtri selezionati.</p>';
+}
+
+function impostaFiltroContattiCommerciali(filtro, pulsante) {
+    fornitoriClientiFiltro = filtro;
+    document.querySelectorAll('.commercial-filter').forEach(function (elemento) {
+        var attivo = elemento === pulsante;
+        elemento.classList.toggle('active', attivo);
+        elemento.setAttribute('aria-pressed', attivo ? 'true' : 'false');
+    });
+    filtraContattiCommerciali();
+}
+
+function apriContattoCommerciale() {
+    var form = document.getElementById('commercialContactForm');
+    if (!form) return;
+    form.reset();
+    document.getElementById('commercialContactRow').value = '';
+    fornitoriClientiNomeInModifica = '';
+    document.getElementById('commercialContactType').disabled = false;
+    document.getElementById('commercialContactFormTitle').innerText = 'Nuovo contatto';
+    document.getElementById('commercialContactMessage').innerText = '';
+    document.getElementById('commercialContactFormPanel').classList.remove('hidden');
+    document.getElementById('commercialContactName').focus();
+}
+
+function modificaContattoCommerciale(riga, tipo) {
+    var contatto = fornitoriClientiContatti.find(function (item) {
+        return Number(item.riga) === Number(riga) && item.tipo === tipo;
+    });
+    if (!contatto) {
+        showToast('Il contatto non è più disponibile. Aggiorna la rubrica.', 'error');
+        return;
+    }
+
+    document.getElementById('commercialContactRow').value = String(contatto.riga);
+    fornitoriClientiNomeInModifica = contatto.nome;
+    document.getElementById('commercialContactType').value = contatto.tipo;
+    document.getElementById('commercialContactType').disabled = true;
+    document.getElementById('commercialContactName').value = contatto.nome || '';
+    document.getElementById('commercialContactVat').value = contatto.partitaIva || '';
+    document.getElementById('commercialContactSdi').value = contatto.codiceSdi || '';
+    document.getElementById('commercialContactAddress').value = contatto.indirizzo || '';
+    document.getElementById('commercialContactCap').value = contatto.cap || '';
+    document.getElementById('commercialContactCity').value = contatto.comune || '';
+    document.getElementById('commercialContactProvince').value = contatto.provincia || '';
+    document.getElementById('commercialContactFormTitle').innerText = 'Modifica contatto';
+    document.getElementById('commercialContactMessage').innerText = '';
+    document.getElementById('commercialContactFormPanel').classList.remove('hidden');
+    document.getElementById('commercialContactName').focus();
+}
+
+function chiudiContattoCommerciale() {
+    document.getElementById('commercialContactFormPanel').classList.add('hidden');
+    document.getElementById('commercialContactType').disabled = false;
+}
+
+async function salvaContattoCommerciale(event) {
+    event.preventDefault();
+    var messaggio = document.getElementById('commercialContactMessage');
+    var submit = event.currentTarget.querySelector('[type="submit"]');
+    var dati = {
+        tipo: document.getElementById('commercialContactType').value,
+        riga: document.getElementById('commercialContactRow').value,
+        nomeAtteso: fornitoriClientiNomeInModifica,
+        nome: document.getElementById('commercialContactName').value,
+        partitaIva: document.getElementById('commercialContactVat').value,
+        codiceSdi: document.getElementById('commercialContactSdi').value,
+        indirizzo: document.getElementById('commercialContactAddress').value,
+        cap: document.getElementById('commercialContactCap').value,
+        comune: document.getElementById('commercialContactCity').value,
+        provincia: document.getElementById('commercialContactProvince').value
+    };
+
+    submit.disabled = true;
+    messaggio.innerText = 'Salvataggio in corso...';
+    try {
+        var risultato = await chiamaServer('salvaContattoCommerciale', dati, true);
+        if (!risultato || !risultato.ok) throw new Error(risultato && risultato.messaggio || 'Salvataggio non riuscito.');
+        chiudiContattoCommerciale();
+        showToast('Contatto salvato.', 'success');
+        await renderFornitoriClientiView();
+    } catch (error) {
+        console.error('Impossibile salvare il contatto commerciale:', error);
+        messaggio.innerText = error.message || 'Impossibile salvare il contatto.';
+    } finally {
+        submit.disabled = false;
+    }
 }
 
 function renderListinoPrezziView() {
@@ -6781,7 +6914,7 @@ function apriCabinaElettorale(idElezione, titolo) {
         divModale.className = 'fullscreen-view hidden';
         divModale.style.cssText = 'background: rgba(15, 23, 42, 0.8); z-index: 9500; position: fixed; top:0; left:0; width:100%; height:100%; display:flex; align-items:center; justify-content:center;';
         divModale.innerHTML = `
-            <div class="auth-card" style="max-width: 700px; width:90%; background:white; padding:25px; border-radius:12px; text-align: left; max-height: 90vh; overflow-y: auto;">
+            <div class="auth-card cabina-modal-card" style="max-width: 700px; width:90%; background:white; padding:25px; border-radius:12px; text-align: left; max-height: 90vh; overflow-y: auto;">
                 <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px; border-bottom: 1px solid #e2e8f0; padding-bottom: 15px;">
                     <div>
                         <h3 id="cabinaTitoloElezione" style="margin:0; font-size:18px; color:#0f172a;">Cabina Elettorale</h3>
@@ -6792,7 +6925,7 @@ function apriCabinaElettorale(idElezione, titolo) {
                 <div id="cabinaContenutoDinamico" style="margin-bottom: 20px;">
                     <div class="loader"></div>
                 </div>
-                <div style="margin-top:25px; display:flex; gap:10px; justify-content:flex-end; border-top: 1px solid #e2e8f0; padding-top: 15px;">
+                <div class="cabina-modal-actions" style="margin-top:25px; display:flex; gap:10px; justify-content:flex-end; border-top: 1px solid #e2e8f0; padding-top: 15px;">
                     <button class="btn-secondary" style="width:auto; padding:10px 20px;" onclick="chiudiCabinaElettorale()">Annulla</button>
                     <button class="btn-primary" style="width:auto; padding:10px 20px; background:#16a34a;" onclick="confermaInvioVoto()">CONFERMA E INVIA VOTO</button>
                 </div>
@@ -6834,27 +6967,30 @@ function apriCabinaElettorale(idElezione, titolo) {
         } else if (res.tipo === 'ASSEMBLEA') {
             html += `<p style="font-size: 13px; color: #475569; margin-bottom: 15px;">Esprimi il tuo voto punto per punto all'Ordine del Giorno:</p>`;
             html += `
-                <table style="width: 100%; border-collapse: collapse; border: 1px solid #e2e8f0; font-size: 13px;">
-                    <tr style="background: #f1f5f9;">
-                        <th style="padding: 10px; border: 1px solid #e2e8f0; text-align: left;">Punto all'Ordine del Giorno</th>
-                        <th style="padding: 10px; border: 1px solid #e2e8f0; text-align: center; width: 240px;">Esprimi Voto</th>
-                    </tr>
+                <table class="cabina-odg-table" style="width: 100%; border-collapse: collapse; border: 1px solid #e2e8f0; font-size: 13px;">
+                    <thead>
+                        <tr>
+                            <th scope="col">Punto all'Ordine del Giorno</th>
+                            <th scope="col">Esprimi Voto</th>
+                        </tr>
+                    </thead>
+                    <tbody>
             `;
             res.opzioni.forEach(function (punto, index) {
                 html += `
                     <tr class="riga-odg" data-punto="${punto}">
-                        <td style="padding: 12px; border: 1px solid #e2e8f0; color: #0f172a; font-weight: 500;">${punto}</td>
-                        <td style="padding: 12px; border: 1px solid #e2e8f0; text-align: center;">
-                            <div style="display: flex; gap: 4px; justify-content: center;">
-                                <label style="font-size:11px; cursor:pointer; background:#dcfce7; padding:4px 6px; border-radius:4px; color:#166534;"><input type="radio" name="punto_${index}" value="Favorevole" checked> Fav.</label>
-                                <label style="font-size:11px; cursor:pointer; background:#fee2e2; padding:4px 6px; border-radius:4px; color:#991b1b;"><input type="radio" name="punto_${index}" value="Contrario"> Contr.</label>
-                                <label style="font-size:11px; cursor:pointer; background:#f1f5f9; padding:4px 6px; border-radius:4px; color:#475569;"><input type="radio" name="punto_${index}" value="Astenuto"> Ast.</label>
+                        <td class="cabina-odg-point">${punto}</td>
+                        <td class="cabina-odg-vote">
+                            <div class="cabina-vote-choices">
+                                <label class="cabina-vote-choice cabina-vote-favor"><input type="radio" name="punto_${index}" value="Favorevole" checked> <span>Favorevole</span></label>
+                                <label class="cabina-vote-choice cabina-vote-against"><input type="radio" name="punto_${index}" value="Contrario"> <span>Contrario</span></label>
+                                <label class="cabina-vote-choice cabina-vote-abstain"><input type="radio" name="punto_${index}" value="Astenuto"> <span>Astenuto</span></label>
                             </div>
                         </td>
                     </tr>
                 `;
             });
-            html += `</table>`;
+            html += `</tbody></table>`;
         }
 
         container.innerHTML = html;

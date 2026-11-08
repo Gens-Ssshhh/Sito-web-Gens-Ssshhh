@@ -272,7 +272,7 @@ function inviaPromemoriaElezioniAutomatizzati() {
   var oggi = new Date();
   oggi.setHours(0, 0, 0, 0);
   
-  var urlWebApp = ScriptApp.getService().getUrl();
+  var urlWebApp = "https://sites.google.com/view/gens-ssshhh/area-riservata";
 
   // 1. CREIAMO LA LISTA DEI SOCI ATTIVI E DEI LORO HASH
   var sociAttivi = [];

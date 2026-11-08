@@ -927,8 +927,67 @@
                     <div class="calendar-panel">
                         <div class="calendar-header-row">
                             <h3>Rubrica commerciale</h3>
-                            <button class="compact-action" onclick="renderFornitoriClientiView()">Aggiorna</button>
+                            <div class="commercial-actions">
+                                <button class="compact-action" type="button" onclick="renderFornitoriClientiView()">Aggiorna</button>
+                                <button class="btn-primary commercial-add-button" type="button" onclick="apriContattoCommerciale()">+ Nuovo contatto</button>
+                            </div>
                         </div>
+                        <div id="commercialContactFormPanel" class="commercial-contact-form hidden">
+                            <div class="calendar-header-row">
+                                <h3 id="commercialContactFormTitle">Nuovo contatto</h3>
+                                <button class="compact-action" type="button" onclick="chiudiContattoCommerciale()">Annulla</button>
+                            </div>
+                            <form id="commercialContactForm" onsubmit="salvaContattoCommerciale(event)">
+                                <input id="commercialContactRow" type="hidden">
+                                <div class="commercial-contact-fields">
+                                    <label>Tipo
+                                        <select id="commercialContactType" class="form-input" required>
+                                            <option value="Fornitore">Fornitore</option>
+                                            <option value="Cliente">Cliente</option>
+                                        </select>
+                                    </label>
+                                    <label>Nome / Ragione sociale
+                                        <input id="commercialContactName" class="form-input" maxlength="120" required>
+                                    </label>
+                                    <label>Partita IVA / Codice fiscale
+                                        <input id="commercialContactVat" class="form-input" maxlength="32">
+                                    </label>
+                                    <label>Codice SDI
+                                        <input id="commercialContactSdi" class="form-input" maxlength="20">
+                                    </label>
+                                    <label>Indirizzo
+                                        <input id="commercialContactAddress" class="form-input" maxlength="160">
+                                    </label>
+                                    <label>CAP
+                                        <input id="commercialContactCap" class="form-input" maxlength="12">
+                                    </label>
+                                    <label>Comune
+                                        <input id="commercialContactCity" class="form-input" maxlength="80">
+                                    </label>
+                                    <label>Provincia
+                                        <input id="commercialContactProvince" class="form-input" maxlength="40">
+                                    </label>
+                                </div>
+                                <div class="commercial-form-footer">
+                                    <p id="commercialContactMessage" role="status" aria-live="polite"></p>
+                                    <button class="btn-primary" type="submit">Salva contatto</button>
+                                </div>
+                            </form>
+                        </div>
+                        <div class="commercial-list-toolbar">
+                            <label class="sr-only" for="commercialContactSearch">Cerca nella rubrica</label>
+                            <input id="commercialContactSearch" class="form-input" type="search"
+                                placeholder="Cerca per nome, P. IVA o località" oninput="filtraContattiCommerciali()">
+                            <div class="commercial-filter-group" role="group" aria-label="Filtra contatti">
+                                <button type="button" class="commercial-filter active" data-commercial-filter="Tutti"
+                                    aria-pressed="true" onclick="impostaFiltroContattiCommerciali('Tutti', this)">Tutti</button>
+                                <button type="button" class="commercial-filter" data-commercial-filter="Fornitore"
+                                    aria-pressed="false" onclick="impostaFiltroContattiCommerciali('Fornitore', this)">Fornitori</button>
+                                <button type="button" class="commercial-filter" data-commercial-filter="Cliente"
+                                    aria-pressed="false" onclick="impostaFiltroContattiCommerciali('Cliente', this)">Clienti</button>
+                            </div>
+                        </div>
+                        <p id="commercialContactStatus" class="commercial-status" role="status" aria-live="polite"></p>
                         <div id="fornitoriClientiList" class="calendar-list"></div>
                     </div>
                 </div>

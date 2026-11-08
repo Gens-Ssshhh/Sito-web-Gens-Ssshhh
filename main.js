@@ -37,6 +37,7 @@ var AZIONI_API_CONSENTITE = [
   "getElezioniPerCandidatura", "getGruppiSpese", "getListaDocumenti", "getListaFornitori",
   "getListaSociPerSponsor", "getNomiSociAttivi", "getNotificheUtente",
   "getPianoDeiContiDinamico", "getPreferenzeNotifiche", "getPropostaEventoPubblica", "getProposteEventi",
+  "getRubricaCommerciale", "salvaContattoCommerciale",
   "getReportStorici", "getConfigurazioneNotificheGlobali", "salvaConfigurazioneNotificheGlobali", "ripristinaPreferenzeNotifiche", "salvaPreferenzeNotifiche", "getRichiesteFirmaUtente", "getRichiesteIscrizioneDaAvvallare",
   "getRispostaRicompilazioneOspite", "getRisultatiLive", "getSociPerFattura",
   "getStartData", "getStoricoFirmeUtente", "inviaCandidatura", "inviaLinkReset",
@@ -240,7 +241,9 @@ function doPost(e) {
       return ContentService.createTextOutput(JSON.stringify({ status: "ERROR", messaggio: "Azione interna non invocabile via API." })).setMimeType(ContentService.MimeType.JSON);
     }
 
-    var azioneAmministrativa = /^admin/i.test(azione || "") || /Admin$/.test(azione || "") || azione === "exportBilancioExcel" || azione === "configuraTriggerAmmissioni";
+    var azioneAmministrativa = /^admin/i.test(azione || "") || /Admin$/.test(azione || "") ||
+      azione === "exportBilancioExcel" || azione === "configuraTriggerAmmissioni" ||
+      azione === "getRubricaCommerciale" || azione === "salvaContattoCommerciale";
     if (azioneAmministrativa) {
       var utenteSessione = getDatiUtente(emailSessione);
       if (!utenteSessione || !isRuoloAmministrativo(utenteSessione.ruolo)) {

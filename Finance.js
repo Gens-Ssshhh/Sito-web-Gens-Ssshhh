@@ -130,6 +130,143 @@ function getAnagrafeFornitoriDinamica() {
   }
 }
 
+var INTESTAZIONI_RUBRICA_COMMERCIALE_ = [
+  "Fornitore/Cliente", "Partita IVA", "Codice SDI", "Indirizzo", "CAP", "Comune", "Provincia"
+];
+
+function leggiContattiCommerciali_(sheet, tipo) {
+  if (!sheet) return [];
+  var dati = sheet.getDataRange().getValues();
+  if (!dati.length || dati[0].every(function (valore) { return valore === "" || valore == null; })) return [];
+
+  var contatti = [];
+  for (var i = 1; i < dati.length; i++) {
+    var riga = dati[i];
+    var nome = String(riga[0] == null ? "" : riga[0]).trim();
+    if (!nome) continue;
+    contatti.push({
+      riga: i + 1,
+      tipo: tipo,
+      nome: nome,
+      partitaIva: String(riga[1] == null ? "" : riga[1]).trim(),
+      codiceSdi: String(riga[2] == null ? "" : riga[2]).trim(),
+      indirizzo: String(riga[3] == null ? "" : riga[3]).trim(),
+      cap: String(riga[4] == null ? "" : riga[4]).trim(),
+      comune: String(riga[5] == null ? "" : riga[5]).trim(),
+      provincia: String(riga[6] == null ? "" : riga[6]).trim(),
+      saldo: 0
+    });
+  }
+  return contatti;
+}
+
+function getRubricaCommerciale() {
+  var ss = SpreadsheetApp.openById(ID_FOGLIO_CONTABILITA);
+  var fornitori = leggiContattiCommerciali_(ss.getSheetByName("fornitori"), "Fornitore");
+  var clienti = leggiContattiCommerciali_(ss.getSheetByName("clienti"), "Cliente");
+  var contatti = fornitori.concat(clienti);
+  var bilancio = ss.getSheetByName("bilancio");
+
+  if (bilancio && bilancio.getLastRow() > 1) {
+    var movimenti = bilancio.getDataRange().getValues();
+    var mappaContatti = {};
+    contatti.forEach(function (contatto) {
+      mappaContatti[contatto.nome.toLowerCase()] = contatto;
+    });
+
+    for (var i = 1; i < movimenti.length; i++) {
+      var riga = movimenti[i];
+      var contatto = mappaContatti[String(riga[5] == null ? "" : riga[5]).trim().toLowerCase()];
+      if (!contatto) continue;
+
+      var contoDare = String(riga[2] == null ? "" : riga[2]).toLowerCase();
+      var contoAvere = String(riga[3] == null ? "" : riga[3]).toLowerCase();
+      var contoRilevante = contatto.tipo === "Fornitore"
+        ? /debit.*fornitor|fornitor.*debit/.test(contoDare + " " + contoAvere)
+        : /credit.*client|client.*credit/.test(contoDare + " " + contoAvere);
+      if (!contoRilevante) continue;
+
+      var importo = Number(String(riga[4] == null ? 0 : riga[4]).replace(",", "."));
+      if (!isFinite(importo)) continue;
+      if (/debit.*fornitor|fornitor.*debit/.test(contoAvere) ||
+          /credit.*client|client.*credit/.test(contoAvere)) {
+        contatto.saldo += importo;
+      }
+      if (/debit.*fornitor|fornitor.*debit/.test(contoDare) ||
+          /credit.*client|client.*credit/.test(contoDare)) {
+        contatto.saldo -= importo;
+      }
+    }
+
+  }
+
+  return contatti;
+}
+
+function salvaContattoCommerciale(dati) {
+  if (!dati || (dati.tipo !== "Fornitore" && dati.tipo !== "Cliente")) {
+    return { ok: false, messaggio: "Seleziona un tipo di contatto valido." };
+  }
+
+  var nome = String(dati.nome == null ? "" : dati.nome).trim();
+  if (!nome || nome.length > 120) {
+    return { ok: false, messaggio: "Inserisci un nome valido (massimo 120 caratteri)." };
+  }
+
+  var campi = ["partitaIva", "codiceSdi", "indirizzo", "cap", "comune", "provincia"];
+  var limiti = { partitaIva: 32, codiceSdi: 20, indirizzo: 160, cap: 12, comune: 80, provincia: 40 };
+  var valori = [nome];
+  for (var i = 0; i < campi.length; i++) {
+    var valore = String(dati[campi[i]] == null ? "" : dati[campi[i]]).trim();
+    if (valore.length > limiti[campi[i]]) {
+      return { ok: false, messaggio: "Il campo " + campi[i] + " supera la lunghezza consentita." };
+    }
+    valori.push(valore);
+  }
+
+  var ss = SpreadsheetApp.openById(ID_FOGLIO_CONTABILITA);
+  var nomeFoglio = dati.tipo === "Fornitore" ? "fornitori" : "clienti";
+  var sheet = ss.getSheetByName(nomeFoglio);
+  if (!sheet) sheet = ss.insertSheet(nomeFoglio);
+
+  var righe = sheet.getDataRange().getValues();
+  if (!righe.length || righe[0].every(function (valore) { return valore === "" || valore == null; })) {
+    var intestazioni = INTESTAZIONI_RUBRICA_COMMERCIALE_.slice();
+    intestazioni[0] = dati.tipo;
+    sheet.getRange(1, 1, 1, INTESTAZIONI_RUBRICA_COMMERCIALE_.length)
+      .setValues([intestazioni]);
+    righe = [intestazioni];
+  }
+
+  var rigaInput = String(dati.riga == null ? "" : dati.riga).trim();
+  var numeroRiga = rigaInput ? Number(rigaInput) : 0;
+  var indiceModifica = rigaInput && Number.isInteger(numeroRiga) && numeroRiga >= 2 ? numeroRiga - 1 : -1;
+  if ((rigaInput && indiceModifica < 1) || indiceModifica >= righe.length ||
+      (indiceModifica >= 1 && String(righe[indiceModifica][0] || "").trim() === "")) {
+    return { ok: false, messaggio: "Il contatto da modificare non è più disponibile. Aggiorna la rubrica." };
+  }
+
+  var nomeOriginale = indiceModifica >= 1 ? String(righe[indiceModifica][0] || "").trim() : "";
+  if (indiceModifica >= 1 &&
+      String(dati.nomeAtteso == null ? "" : dati.nomeAtteso).trim() !== nomeOriginale) {
+    return { ok: false, messaggio: "La rubrica è cambiata. Aggiornala prima di modificare il contatto." };
+  }
+  var duplicato = righe.slice(1).some(function (riga, indice) {
+    return indice + 1 !== indiceModifica &&
+      String(riga[0] || "").trim().toLowerCase() === nome.toLowerCase();
+  });
+  if (duplicato) return { ok: false, messaggio: "Esiste già un contatto con questo nome." };
+
+  if (indiceModifica >= 1) {
+    sheet.getRange(numeroRiga, 1, 1, valori.length).setValues([valori]);
+  } else {
+    sheet.appendRow(valori);
+    numeroRiga = righe.length + 1;
+  }
+
+  return { ok: true, riga: numeroRiga, nomeOriginale: nomeOriginale };
+}
+
 function creaGruppoSpese(nomeGruppo) {
   var ss = SpreadsheetApp.getActiveSpreadsheet();
   var foglio = ss.getSheetByName("GruppiSpese");

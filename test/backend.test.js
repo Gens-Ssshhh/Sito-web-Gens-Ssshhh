@@ -900,7 +900,7 @@ test('eventi: il creatore invia promemoria email solo ai soci attivi non votanti
   assert.equal(emails[0].bcc, 'anna@example.it');
   assert.match(emails[0].htmlBody, /Cena &amp; assemblea/);
   assert.match(emails[0].htmlBody, /Accedi al portale e vota/);
-  assert.match(emails[0].htmlBody, /href="https:\/\/Gens-Ssshhh\.github\.io\/Sito-web-Gens-Ssshhh\/index\.html"/);
+  assert.match(emails[0].htmlBody, /href="https:\/\/sites\.google\.com\/view\/gens-ssshhh\/area-riservata"/);
   assert.equal(context.inviaPromemoriaVotoPropostaEvento('anna@example.it', 'evento-manuale').ok, false);
   assert.equal(context.inviaPromemoriaVotoPropostaEvento('mario@example.it', 'inesistente').ok, false);
   assert.equal(emails.length, 1);
@@ -1675,7 +1675,7 @@ test('eventi: le email di nuovo questionario e promemoria portano i soci al sito
 
   assert.equal(emails.length, 2);
   emails.forEach(message => {
-    assert.ok(message.body.includes('https://Gens-Ssshhh.github.io/Sito-web-Gens-Ssshhh/index.html'));
+    assert.ok(message.body.includes('https://sites.google.com/view/gens-ssshhh/area-riservata'));
     assert.equal(message.body.includes('?evento='), false);
     assert.equal(message.htmlBody.includes('?evento='), false);
     assert.ok(message.htmlBody.includes('Accedi al portale soci'));

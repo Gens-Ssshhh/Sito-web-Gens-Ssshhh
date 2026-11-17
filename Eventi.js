@@ -840,7 +840,7 @@ function inviaPromemoriaVotoPropostaEvento(emailCreatore, propostaId) {
   var etichetteOpzioni = normalizzaOpzioniEvento_(opzioni).map(function (opzione) {
     return [opzione.data, opzione.ora, opzione.luogo].filter(Boolean).join(' · ');
   });
-  var url = 'https://github.com/Gens-Ssshhh/Sito-web-Gens-Ssshhh.git';
+  var url = 'https://sites.google.com/view/gens-ssshhh/area-riservata';
   var subject = 'Il tuo voto conta: ' + titolo;
   var body = 'Ciao,\n\nla proposta "' + titolo + '" è ancora aperta e non risulta una tua risposta.\n\n' +
     (descrizione ? 'Descrizione:\n' + descrizione + '\n\n' : '') +
@@ -894,7 +894,7 @@ function inviaComunicazioniPropostaEvento_(emails, titolo, propostaId, promemori
   var emailPush = filtraDestinatariNotifica_(emails, tipoNotifica, 'app');
   var oggetto = promemoria ? 'Promemoria: questionario evento' : 'Nuovo questionario evento';
   var testoEvento = escapeHtmlEvento_(titolo);
-  var url = 'https://Gens-Ssshhh.github.io/Sito-web-Gens-Ssshhh/index.html';
+  var url = 'https://sites.google.com/view/gens-ssshhh/area-riservata';
   var intro = promemoria
     ? 'Sono passati tre giorni e non risulta ancora una tua risposta.'
     : 'È stato pubblicato un nuovo questionario per un evento.';

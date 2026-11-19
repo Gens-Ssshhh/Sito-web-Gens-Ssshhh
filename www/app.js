@@ -7447,10 +7447,49 @@ function apriRisultatiLive(idElezione) {
             </div>
         `;
 
-        // 2. Disegna le Barre di Progresso
+        // 2. Disegna i risultati
         var htmlBars = '';
         if (data.risultati.length === 0) {
             htmlBars = '<p style="text-align:center; color:#64748b; padding: 20px; border: 1px dashed #cbd5e1; border-radius: 8px;">Nessun voto espresso finora.</p>';
+        } else if (data.tipo === 'ASSEMBLEA') {
+            var risultatiPerPunto = {};
+            var ordinePunti = [];
+
+            data.risultati.forEach(function (r) {
+                var match = String(r.opzione).match(/^(.*?)\s*\[([^\]]+)\]\s*$/);
+                var punto = match ? match[1].trim() : String(r.opzione);
+                var esito = match ? match[2].trim().toLowerCase() : '';
+
+                if (!risultatiPerPunto[punto]) {
+                    risultatiPerPunto[punto] = { favorevole: 0, contrario: 0, astenuto: 0 };
+                    ordinePunti.push(punto);
+                }
+
+                if (esito === 'favorevole' || esito === 'contrario' || esito === 'astenuto') {
+                    risultatiPerPunto[punto][esito] += Number(r.voti) || 0;
+                }
+            });
+
+            htmlBars = `
+                <div style="display:grid; grid-template-columns:minmax(0, 1fr) repeat(3, minmax(72px, auto)); gap:8px; align-items:center; padding:0 10px 8px; border-bottom:1px solid #e2e8f0; color:#64748b; font-size:11px; font-weight:bold; text-transform:uppercase; text-align:center;">
+                    <span style="text-align:left;">Punto all'ordine del giorno</span>
+                    <span style="color:#16a34a;">Favorevoli</span>
+                    <span style="color:#dc2626;">Contrari</span>
+                    <span style="color:#64748b;">Astenuti</span>
+                </div>
+            `;
+
+            ordinePunti.forEach(function (punto) {
+                var conteggi = risultatiPerPunto[punto];
+                htmlBars += `
+                    <div style="display:grid; grid-template-columns:minmax(0, 1fr) repeat(3, minmax(72px, auto)); gap:8px; align-items:center; padding:10px; border:1px solid #e2e8f0; border-radius:8px; background:#f8fafc;">
+                        <span style="min-width:0; color:#334155; font-size:13px; font-weight:bold; overflow-wrap:anywhere;">${escapeTestoEvento(punto)}</span>
+                        <span style="color:#16a34a; font-size:18px; font-weight:bold; text-align:center;">${conteggi.favorevole}</span>
+                        <span style="color:#dc2626; font-size:18px; font-weight:bold; text-align:center;">${conteggi.contrario}</span>
+                        <span style="color:#64748b; font-size:18px; font-weight:bold; text-align:center;">${conteggi.astenuto}</span>
+                    </div>
+                `;
+            });
         } else {
             // Usa il voto più alto come 100% per proporzionare le barre visivamente
             var maxVoti = Math.max(...data.risultati.map(r => r.voti));

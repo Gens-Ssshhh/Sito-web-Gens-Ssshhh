@@ -731,7 +731,7 @@ function adminGetStatisticheFirme(adminEmail) {
 }
 
 function adminInviaSollecito(docName, listaEmail) {
-  var urlWebApp = ScriptApp.getService().getUrl(); // Recupera automaticamente il link del tuo sito
+  var urlWebApp = "https://sites.google.com/view/gens-ssshhh/area-riservata";
 
   var count = 0;
   listaEmail.forEach(email => {
@@ -1157,7 +1157,7 @@ function inviaDigestSettimanale() {
   // 1. CONFIGURAZIONE
   var emailMittente = fConfig.getRange("B19").getValue() || Session.getActiveUser().getEmail(); // Chi invia
   var nomeAssociazione = "Gens Ssshhh"; // O leggi da config
-  var urlWebApp = ScriptApp.getService().getUrl(); // Link al tuo sito
+  var urlWebApp = "https://sites.google.com/view/gens-ssshhh/area-riservata";
 
   // 2. CERCA NEWS DEGLI ULTIMI 7 GIORNI
   var oggi = new Date();

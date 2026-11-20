@@ -166,6 +166,23 @@ test('ammissione: crea account solo dopo esito favorevole dei 2/3', () => {
   assert.equal(messages.length, 1);
 });
 
+test('documenti: il sollecito firma porta al sito pubblico Google Sites', () => {
+  const emails = [];
+  const pushes = [];
+  const context = {
+    MailApp: { sendEmail: message => emails.push(message) },
+    inviaNotificaPushUtente: (...args) => pushes.push(args),
+    notificaAbilitata_: () => true
+  };
+  loadScript('Admin.js', context);
+
+  assert.equal(context.adminInviaSollecito('contratto vacanza Santorini 2027.pdf', ['mario@example.it']), 'SOLLECITO_OK_1');
+  assert.equal(emails.length, 1);
+  assert.ok(emails[0].htmlBody.includes('href="https://sites.google.com/view/gens-ssshhh/area-riservata"'));
+  assert.equal(emails[0].htmlBody.includes('script.google.com'), false);
+  assert.equal(pushes.length, 1);
+});
+
 test('fatture: admin cerca soci attivi e invia XML/PDF con sollecito pagamento', () => {
   const rows = [
     ['Nome', 'Password', 'Email', '', 'Cognome', '', '', '', '', '', '', 'Stato Socio', 'Carica sociale'],
